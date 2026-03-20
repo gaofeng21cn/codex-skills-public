@@ -4,7 +4,7 @@ import importlib.util
 from pathlib import Path
 
 
-SCRIPT_PATH = Path("/Users/gaofeng/.codex/skills/apple-apps/scripts/apple_apps.py")
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "apple_apps.py"
 SPEC = importlib.util.spec_from_file_location("apple_apps", SCRIPT_PATH)
 assert SPEC and SPEC.loader
 apple_apps = importlib.util.module_from_spec(SPEC)
