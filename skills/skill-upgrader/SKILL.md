@@ -1,0 +1,65 @@
+---
+name: skill-upgrader
+description: Use when inspecting or upgrading managed local Codex skills and the local superpowers repo against explicit upstream sources, especially when you want to avoid re-deriving source mappings by hand.
+---
+
+# Skill Upgrader
+
+## Overview
+
+This skill manages a fixed set of local Codex skills plus `~/.codex/superpowers` using an explicit source manifest. It is for deterministic inspection and upgrade, not source discovery.
+
+## When to Use
+
+- User asks which installed skills can be upgraded
+- User asks to upgrade managed skills to the latest known upstream versions
+- You want a fast, repeatable alternative to manually re-mapping skill origins
+
+Do not use this skill to guess where an unknown skill came from.
+
+## Command Surface
+
+The helper lives next to this skill at `scripts/skill_upgrader.py`.
+
+Inspect managed targets:
+
+```bash
+python3 scripts/skill_upgrader.py inspect
+python3 scripts/skill_upgrader.py inspect --only superpowers
+python3 scripts/skill_upgrader.py inspect --only agent-browser --only ui-ux-pro-max
+```
+
+Upgrade managed targets:
+
+```bash
+python3 scripts/skill_upgrader.py upgrade
+python3 scripts/skill_upgrader.py upgrade --only superpowers
+python3 scripts/skill_upgrader.py upgrade --only agent-browser --only ui-ux-pro-max
+```
+
+## Workflow
+
+1. Run `inspect` first.
+2. Read the JSON results.
+3. Upgrade only items with `"action": "upgrade"`.
+4. Re-run `inspect` to confirm they are now current.
+
+## Safety Rules
+
+- Managed targets are defined only in `sources.json`.
+- The helper must not infer repository URLs from skill names.
+- If a target is dirty, ahead, or diverged, report that state instead of forcing an upgrade.
+- `overlay_sync` targets are exact mirrors of declared upstream mappings. Local drift in those directories is removed on upgrade.
+
+## Current Managed Targets
+
+- `superpowers`
+- `agent-browser`
+- `defuddle`
+- `json-canvas`
+- `mineru-document-extractor`
+- `obsidian-bases`
+- `obsidian-cli`
+- `obsidian-markdown`
+- `pdf`
+- `ui-ux-pro-max`

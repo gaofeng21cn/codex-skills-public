@@ -1,0 +1,160 @@
+{
+  "items": [
+    {
+      "name": "superpowers",
+      "kind": "git_repo",
+      "local_path": "~/.codex/superpowers",
+      "remote": "origin",
+      "branch": "main"
+    },
+    {
+      "name": "agent-browser",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/agent-browser",
+      "source": {
+        "repo_url": "https://github.com/vercel-labs/agent-browser.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": "skills/agent-browser",
+          "target": "."
+        }
+      ]
+    },
+    {
+      "name": "defuddle",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/defuddle",
+      "source": {
+        "repo_url": "https://github.com/kepano/obsidian-skills.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": "skills/defuddle",
+          "target": "."
+        }
+      ]
+    },
+    {
+      "name": "json-canvas",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/json-canvas",
+      "source": {
+        "repo_url": "https://github.com/kepano/obsidian-skills.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": "skills/json-canvas",
+          "target": "."
+        }
+      ]
+    },
+    {
+      "name": "mineru-document-extractor",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/mineru-document-extractor",
+      "source": {
+        "repo_url": "https://github.com/MinerU-Extract/mineru-document-extractor.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": ".",
+          "target": "."
+        }
+      ]
+    },
+    {
+      "name": "obsidian-bases",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/obsidian-bases",
+      "source": {
+        "repo_url": "https://github.com/kepano/obsidian-skills.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": "skills/obsidian-bases",
+          "target": "."
+        }
+      ]
+    },
+    {
+      "name": "obsidian-cli",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/obsidian-cli",
+      "source": {
+        "repo_url": "https://github.com/kepano/obsidian-skills.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": "skills/obsidian-cli",
+          "target": "."
+        }
+      ]
+    },
+    {
+      "name": "obsidian-markdown",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/obsidian-markdown",
+      "source": {
+        "repo_url": "https://github.com/kepano/obsidian-skills.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": "skills/obsidian-markdown",
+          "target": "."
+        }
+      ]
+    },
+    {
+      "name": "pdf",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/pdf",
+      "source": {
+        "repo_url": "https://github.com/openai/skills.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": "skills/.curated/pdf",
+          "target": "."
+        }
+      ]
+    },
+    {
+      "name": "ui-ux-pro-max",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/ui-ux-pro-max",
+      "source": {
+        "repo_url": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "file",
+          "source": ".claude/skills/ui-ux-pro-max/SKILL.md",
+          "target": "SKILL.md"
+        },
+        {
+          "kind": "dir_contents",
+          "source": "cli/assets",
+          "target": "."
+        }
+      ]
+    }
+  ]
+}
