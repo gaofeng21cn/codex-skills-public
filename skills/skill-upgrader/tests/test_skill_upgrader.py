@@ -58,6 +58,91 @@ def test_load_manifest_expands_user_paths(tmp_path: Path, monkeypatch) -> None:
     assert len(items) == 1
     assert items[0].name == "sample-repo"
     assert items[0].local_path == home_dir / "managed" / "repo"
+    assert items[0].managed_path == home_dir / "managed" / "repo"
+
+
+def test_load_manifest_supports_explicit_managed_paths(tmp_path: Path, monkeypatch) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    manifest_path = tmp_path / "sources.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "name": "sample-skill",
+                        "kind": "overlay_sync",
+                        "local_path": "~/.codex/skills/sample-skill",
+                        "managed_path": "~/.skills-manager/repos/sample-skill/src/sample-skill",
+                        "source": {
+                            "repo_url": "https://example.invalid/repo.git",
+                            "ref": "main",
+                        },
+                        "mappings": [
+                            {
+                                "kind": "dir_contents",
+                                "source": "skill",
+                                "target": ".",
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    items = skill_upgrader.load_manifest(manifest_path)
+
+    assert len(items) == 1
+    assert items[0].local_path == home_dir / ".codex" / "skills" / "sample-skill"
+    assert items[0].managed_path == home_dir / ".skills-manager" / "repos" / "sample-skill" / "src" / "sample-skill"
+
+
+def test_load_manifest_supports_mapping_specific_target_bases(tmp_path: Path, monkeypatch) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    manifest_path = tmp_path / "sources.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "name": "sample-skill",
+                        "kind": "overlay_sync",
+                        "local_path": "~/.codex/skills/sample-skill",
+                        "source": {
+                            "repo_url": "https://example.invalid/repo.git",
+                            "ref": "main",
+                        },
+                        "mappings": [
+                            {
+                                "kind": "file",
+                                "source": "docs/SKILL.md",
+                                "target": "SKILL.md",
+                                "target_base": "~/.skills-manager/skills/sample-skill",
+                            },
+                            {
+                                "kind": "dir_contents",
+                                "source": "src/sample-skill/data",
+                                "target": "data",
+                                "target_base": "~/.skills-manager/repos/sample-skill/src/sample-skill",
+                            },
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    items = skill_upgrader.load_manifest(manifest_path)
+
+    assert len(items) == 1
+    assert items[0].mappings[0].target_base == home_dir / ".skills-manager" / "skills" / "sample-skill"
+    assert items[0].mappings[1].target_base == home_dir / ".skills-manager" / "repos" / "sample-skill" / "src" / "sample-skill"
 
 
 def test_build_overlay_stage_combines_file_and_dir_contents(tmp_path: Path) -> None:
@@ -101,6 +186,153 @@ def test_sync_tree_exact_removes_extraneous_entries(tmp_path: Path) -> None:
     assert not (local_root / "obsolete.txt").exists()
     assert (local_root / "nested" / "keep.txt").read_text(encoding="utf-8") == "fresh\n"
     assert (local_root / "SKILL.md").read_text(encoding="utf-8") == "current\n"
+
+
+def test_upgrade_overlay_sync_targets_managed_path_not_projection_path(tmp_path: Path) -> None:
+    checkout_root = tmp_path / "checkout"
+    (checkout_root / "skill" / "data").mkdir(parents=True)
+    (checkout_root / "skill" / "data" / "catalog.csv").write_text("fresh\n", encoding="utf-8")
+    (checkout_root / "skill" / "templates").mkdir(parents=True)
+    (checkout_root / "skill" / "templates" / "skill-content.md").write_text("template\n", encoding="utf-8")
+    (checkout_root / "docs").mkdir()
+    (checkout_root / "docs" / "SKILL.md").write_text("---\nname: sample\ndescription: Use when testing.\n---\n", encoding="utf-8")
+
+    managed_root = tmp_path / "managed"
+    (managed_root / "data").mkdir(parents=True)
+    (managed_root / "data" / "catalog.csv").write_text("stale\n", encoding="utf-8")
+    (managed_root / "templates").mkdir()
+    (managed_root / "templates" / "skill-content.md").write_text("old template\n", encoding="utf-8")
+    (managed_root / "SKILL.md").write_text("old\n", encoding="utf-8")
+
+    projection_root = tmp_path / "projection"
+    projection_root.mkdir()
+    (projection_root / "data").symlink_to(managed_root / "data", target_is_directory=True)
+    (projection_root / "templates").symlink_to(managed_root / "templates", target_is_directory=True)
+    (projection_root / "SKILL.md").write_text("old\n", encoding="utf-8")
+
+    item = skill_upgrader.ManagedItem(
+        name="sample",
+        kind="overlay_sync",
+        local_path=projection_root,
+        managed_path=managed_root,
+        source=skill_upgrader.SourceRepo(repo_url="https://example.invalid/repo.git", ref="main"),
+        mappings=(
+            skill_upgrader.Mapping(kind="dir_contents", source="skill", target="."),
+            skill_upgrader.Mapping(kind="file", source="docs/SKILL.md", target="SKILL.md"),
+        ),
+    )
+
+    store = skill_upgrader.RepoCheckoutStore(tmp_path / "checkouts")
+    store.checkouts[(item.source.repo_url, item.source.ref)] = checkout_root
+
+    result = skill_upgrader.upgrade_overlay_sync(item, store)
+
+    assert result["local_state"] == "current"
+    assert result["action"] == "none"
+    assert (managed_root / "data" / "catalog.csv").read_text(encoding="utf-8") == "fresh\n"
+    assert (managed_root / "templates" / "skill-content.md").read_text(encoding="utf-8") == "template\n"
+
+
+def test_upgrade_overlay_sync_supports_mapping_specific_target_bases(tmp_path: Path) -> None:
+    checkout_root = tmp_path / "checkout"
+    (checkout_root / "docs").mkdir(parents=True)
+    (checkout_root / "docs" / "SKILL.md").write_text("---\nname: sample\ndescription: Use when testing.\n---\n", encoding="utf-8")
+    (checkout_root / "src" / "sample-skill" / "data").mkdir(parents=True)
+    (checkout_root / "src" / "sample-skill" / "data" / "catalog.csv").write_text("fresh\n", encoding="utf-8")
+    (checkout_root / "src" / "sample-skill" / "scripts").mkdir(parents=True)
+    (checkout_root / "src" / "sample-skill" / "scripts" / "search.py").write_text("print('fresh')\n", encoding="utf-8")
+
+    projection_root = tmp_path / "projection"
+    projection_root.mkdir()
+
+    skill_view_root = tmp_path / "skill-view"
+    skill_view_root.mkdir()
+    (skill_view_root / "SKILL.md").write_text("old\n", encoding="utf-8")
+
+    source_root = tmp_path / "source-root"
+    (source_root / "data").mkdir(parents=True)
+    (source_root / "data" / "catalog.csv").write_text("stale\n", encoding="utf-8")
+    (source_root / "scripts").mkdir(parents=True)
+    (source_root / "scripts" / "search.py").write_text("print('stale')\n", encoding="utf-8")
+
+    item = skill_upgrader.ManagedItem(
+        name="sample",
+        kind="overlay_sync",
+        local_path=projection_root,
+        source=skill_upgrader.SourceRepo(repo_url="https://example.invalid/repo.git", ref="main"),
+        mappings=(
+            skill_upgrader.Mapping(
+                kind="file",
+                source="docs/SKILL.md",
+                target="SKILL.md",
+                target_base=skill_view_root,
+            ),
+            skill_upgrader.Mapping(
+                kind="dir_contents",
+                source="src/sample-skill/data",
+                target="data",
+                target_base=source_root,
+            ),
+            skill_upgrader.Mapping(
+                kind="dir_contents",
+                source="src/sample-skill/scripts",
+                target="scripts",
+                target_base=source_root,
+            ),
+        ),
+    )
+
+    store = skill_upgrader.RepoCheckoutStore(tmp_path / "checkouts")
+    store.checkouts[(item.source.repo_url, item.source.ref)] = checkout_root
+
+    result = skill_upgrader.upgrade_overlay_sync(item, store)
+
+    assert result["local_state"] == "current"
+    assert result["action"] == "none"
+    assert (skill_view_root / "SKILL.md").read_text(encoding="utf-8").startswith("---\nname: sample")
+    assert (source_root / "data" / "catalog.csv").read_text(encoding="utf-8") == "fresh\n"
+    assert (source_root / "scripts" / "search.py").read_text(encoding="utf-8") == "print('fresh')\n"
+
+
+def test_inspect_overlay_sync_blocks_upgrade_for_dirty_git_targets(tmp_path: Path) -> None:
+    checkout_root = tmp_path / "checkout"
+    (checkout_root / "skill").mkdir(parents=True)
+    (checkout_root / "skill" / "catalog.csv").write_text("fresh\n", encoding="utf-8")
+
+    repo_root = tmp_path / "managed-repo"
+    subprocess.run(["git", "init", str(repo_root)], check=True, text=True, capture_output=True)
+    configure_git_user(repo_root)
+    target_root = repo_root / "src" / "sample-skill"
+    target_root.mkdir(parents=True)
+    (target_root / "catalog.csv").write_text("baseline\n", encoding="utf-8")
+    run_git(["add", "."], cwd=repo_root)
+    run_git(["commit", "-m", "baseline"], cwd=repo_root)
+
+    (target_root / "catalog.csv").write_text("local-dirty\n", encoding="utf-8")
+
+    item = skill_upgrader.ManagedItem(
+        name="sample",
+        kind="overlay_sync",
+        local_path=tmp_path / "projection",
+        source=skill_upgrader.SourceRepo(repo_url="https://example.invalid/repo.git", ref="main"),
+        mappings=(
+            skill_upgrader.Mapping(
+                kind="dir_contents",
+                source="skill",
+                target=".",
+                target_base=target_root,
+            ),
+        ),
+    )
+
+    store = skill_upgrader.RepoCheckoutStore(tmp_path / "checkouts")
+    store.checkouts[(item.source.repo_url, item.source.ref)] = checkout_root
+
+    result = skill_upgrader.inspect_overlay_sync(item, store)
+
+    assert result["local_state"] == "different-dirty"
+    assert result["action"] == "none"
+    assert result["destinations"][0]["dirty"] is True
 
 
 def test_inspect_git_repo_detects_repo_behind_upstream(tmp_path: Path) -> None:

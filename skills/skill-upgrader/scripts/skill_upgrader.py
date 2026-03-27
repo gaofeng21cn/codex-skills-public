@@ -25,6 +25,7 @@ class Mapping:
     kind: str
     source: str
     target: str
+    target_base: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -32,10 +33,15 @@ class ManagedItem:
     name: str
     kind: str
     local_path: Path
+    managed_path: Path | None = None
     source: SourceRepo | None = None
     mappings: tuple[Mapping, ...] = ()
     remote: str = "origin"
     branch: str = "main"
+
+    @property
+    def target_path(self) -> Path:
+        return self.managed_path if self.managed_path is not None else self.local_path
 
 
 @dataclass
@@ -92,19 +98,37 @@ def run(args: list[str], cwd: Path | None = None) -> str:
     return result.stdout.strip()
 
 
+def try_run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        args,
+        cwd=cwd,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+
 def load_manifest(path: Path) -> list[ManagedItem]:
     data = json.loads(path.read_text(encoding="utf-8"))
     items: list[ManagedItem] = []
     for raw in data["items"]:
         kind = raw["kind"]
         local_path = Path(raw["local_path"]).expanduser()
+        managed_path = Path(raw.get("managed_path", raw["local_path"])).expanduser().resolve(strict=False)
         source = None
         mappings: tuple[Mapping, ...] = ()
         if kind == "overlay_sync":
             source_raw = raw["source"]
             source = SourceRepo(repo_url=source_raw["repo_url"], ref=source_raw["ref"])
             mappings = tuple(
-                Mapping(kind=mapping["kind"], source=mapping["source"], target=mapping["target"])
+                Mapping(
+                    kind=mapping["kind"],
+                    source=mapping["source"],
+                    target=mapping["target"],
+                    target_base=Path(mapping["target_base"]).expanduser().resolve(strict=False)
+                    if "target_base" in mapping
+                    else None,
+                )
                 for mapping in raw["mappings"]
             )
         items.append(
@@ -112,6 +136,7 @@ def load_manifest(path: Path) -> list[ManagedItem]:
                 name=raw["name"],
                 kind=kind,
                 local_path=local_path,
+                managed_path=managed_path,
                 source=source,
                 mappings=mappings,
                 remote=raw.get("remote", "origin"),
@@ -174,6 +199,35 @@ def compare_trees(local_root: Path, expected_root: Path) -> dict[str, object]:
     }
 
 
+def git_repo_root(path: Path) -> Path | None:
+    result = try_run(["git", "-C", str(path), "rev-parse", "--show-toplevel"])
+    if result.returncode != 0:
+        return None
+    return Path(result.stdout.strip())
+
+
+def git_subtree_dirty(path: Path) -> bool:
+    repo_root = git_repo_root(path)
+    if repo_root is None:
+        return False
+
+    resolved_root = repo_root.resolve(strict=False)
+    resolved_path = path.resolve(strict=False)
+    rel_path = resolved_path.relative_to(resolved_root)
+    pathspec = "." if rel_path == Path(".") else rel_path.as_posix()
+    result = try_run(
+        ["git", "-C", str(repo_root), "status", "--short", "--untracked-files=all", "--", pathspec]
+    )
+    return bool(result.stdout.strip())
+
+
+def result_paths(item: ManagedItem) -> dict[str, str]:
+    payload = {"local_path": str(item.local_path)}
+    if item.target_path != item.local_path:
+        payload["managed_path"] = str(item.target_path)
+    return payload
+
+
 def ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -194,8 +248,17 @@ def copy_dir_contents(src_dir: Path, dest_dir: Path) -> None:
 
 
 def build_overlay_stage(item: ManagedItem, checkout_root: Path, stage_root: Path) -> None:
+    build_overlay_stage_for_mappings(item, item.mappings, checkout_root, stage_root)
+
+
+def build_overlay_stage_for_mappings(
+    item: ManagedItem,
+    mappings: tuple[Mapping, ...] | list[Mapping],
+    checkout_root: Path,
+    stage_root: Path,
+) -> None:
     stage_root.mkdir(parents=True, exist_ok=True)
-    for mapping in item.mappings:
+    for mapping in mappings:
         source_path = checkout_root / mapping.source
         target_path = stage_root / mapping.target
         if mapping.kind == "file":
@@ -209,6 +272,23 @@ def build_overlay_stage(item: ManagedItem, checkout_root: Path, stage_root: Path
             copy_dir_contents(source_path, target_path)
             continue
         raise ValueError(f"unsupported mapping kind: {mapping.kind}")
+
+
+def mapping_target_base(item: ManagedItem, mapping: Mapping) -> Path:
+    return mapping.target_base if mapping.target_base is not None else item.target_path
+
+
+def build_overlay_stages(item: ManagedItem, checkout_root: Path, stage_root: Path) -> dict[Path, Path]:
+    grouped_mappings: dict[Path, list[Mapping]] = {}
+    for mapping in item.mappings:
+        grouped_mappings.setdefault(mapping_target_base(item, mapping), []).append(mapping)
+
+    stages: dict[Path, Path] = {}
+    for index, (target_base, mappings) in enumerate(grouped_mappings.items()):
+        target_stage_root = stage_root / str(index)
+        build_overlay_stage_for_mappings(item, mappings, checkout_root, target_stage_root)
+        stages[target_base] = target_stage_root
+    return stages
 
 
 def remove_path(path: Path) -> None:
@@ -237,12 +317,13 @@ def sync_tree_exact(stage_root: Path, local_root: Path) -> None:
 
 
 def inspect_git_repo(item: ManagedItem) -> dict[str, object]:
-    run(["git", "-C", str(item.local_path), "fetch", "--all", "--prune"])
-    local_head = run(["git", "-C", str(item.local_path), "rev-parse", "HEAD"])
+    repo_path = item.target_path
+    run(["git", "-C", str(repo_path), "fetch", "--all", "--prune"])
+    local_head = run(["git", "-C", str(repo_path), "rev-parse", "HEAD"])
     upstream_ref = f"{item.remote}/{item.branch}"
-    upstream_head = run(["git", "-C", str(item.local_path), "rev-parse", upstream_ref])
-    merge_base = run(["git", "-C", str(item.local_path), "merge-base", "HEAD", upstream_ref])
-    dirty = bool(run(["git", "-C", str(item.local_path), "status", "--short"]))
+    upstream_head = run(["git", "-C", str(repo_path), "rev-parse", upstream_ref])
+    merge_base = run(["git", "-C", str(repo_path), "merge-base", "HEAD", upstream_ref])
+    dirty = bool(run(["git", "-C", str(repo_path), "status", "--short"]))
 
     if local_head == upstream_head:
         local_state = "dirty-current" if dirty else "current"
@@ -260,7 +341,7 @@ def inspect_git_repo(item: ManagedItem) -> dict[str, object]:
     return {
         "name": item.name,
         "kind": item.kind,
-        "local_path": str(item.local_path),
+        **result_paths(item),
         "source": {
             "remote": item.remote,
             "branch": item.branch,
@@ -280,27 +361,46 @@ def inspect_overlay_sync(item: ManagedItem, store: RepoCheckoutStore) -> dict[st
     checkout_root = store.checkout(item.source)
     with tempfile.TemporaryDirectory(prefix=f"skill-upgrader-{item.name}-") as temp_dir:
         stage_root = Path(temp_dir) / "stage"
-        build_overlay_stage(item, checkout_root, stage_root)
-        diff = compare_trees(item.local_path, stage_root)
-    return {
+        stages = build_overlay_stages(item, checkout_root, stage_root)
+        destinations = []
+        for target_base, target_stage_root in stages.items():
+            diff = compare_trees(target_base, target_stage_root)
+            dirty = git_subtree_dirty(target_base)
+            destinations.append(
+                {
+                    "target_base": str(target_base),
+                    "diff": diff,
+                    "dirty": dirty,
+                }
+            )
+    match = all(destination["diff"]["match"] for destination in destinations)
+    dirty = any(destination["dirty"] for destination in destinations)
+    if match:
+        local_state = "dirty-current" if dirty else "current"
+    else:
+        local_state = "different-dirty" if dirty else "different"
+    result = {
         "name": item.name,
         "kind": item.kind,
-        "local_path": str(item.local_path),
+        **result_paths(item),
         "source": {
             "repo_url": item.source.repo_url,
             "ref": item.source.ref,
         },
-        "local_state": "current" if diff["match"] else "different",
-        "action": "none" if diff["match"] else "upgrade",
-        "diff": diff,
+        "local_state": local_state,
+        "action": "none" if match or dirty else "upgrade",
+        "destinations": destinations,
         "changed": False,
     }
+    if len(destinations) == 1:
+        result["diff"] = destinations[0]["diff"]
+    return result
 
 
 def upgrade_git_repo(item: ManagedItem) -> dict[str, object]:
     result = inspect_git_repo(item)
     if result["action"] == "upgrade":
-        run(["git", "-C", str(item.local_path), "pull", "--ff-only", item.remote, item.branch])
+        run(["git", "-C", str(item.target_path), "pull", "--ff-only", item.remote, item.branch])
         result = inspect_git_repo(item)
         result["changed"] = True
     return result
@@ -315,8 +415,9 @@ def upgrade_overlay_sync(item: ManagedItem, store: RepoCheckoutStore) -> dict[st
     checkout_root = store.checkout(item.source)
     with tempfile.TemporaryDirectory(prefix=f"skill-upgrader-{item.name}-") as temp_dir:
         stage_root = Path(temp_dir) / "stage"
-        build_overlay_stage(item, checkout_root, stage_root)
-        sync_tree_exact(stage_root, item.local_path)
+        stages = build_overlay_stages(item, checkout_root, stage_root)
+        for target_base, target_stage_root in stages.items():
+            sync_tree_exact(target_stage_root, target_base)
 
     result = inspect_overlay_sync(item, store)
     result["changed"] = True
