@@ -188,6 +188,72 @@ def test_sync_tree_exact_removes_extraneous_entries(tmp_path: Path) -> None:
     assert (local_root / "SKILL.md").read_text(encoding="utf-8") == "current\n"
 
 
+def test_load_local_machine_config_reads_github_overrides(tmp_path: Path) -> None:
+    config_path = tmp_path / "local_machine.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "github": {
+                    "overlay_transport": "gh_api",
+                    "git_repo_transport": "ssh_fetch",
+                    "ssh_strict_host_key_checking": "accept-new",
+                    "ssh_connect_timeout_seconds": 12,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = skill_upgrader.load_local_machine_config(config_path)
+
+    assert config.github_overlay_transport == "gh_api"
+    assert config.github_git_repo_transport == "ssh_fetch"
+    assert config.ssh_strict_host_key_checking == "accept-new"
+    assert config.ssh_connect_timeout_seconds == 12
+
+
+def test_resolve_overlay_snapshot_maps_file_and_dir_contents_targets() -> None:
+    mappings = (
+        skill_upgrader.Mapping(kind="dir_contents", source="skills/demo", target="."),
+        skill_upgrader.Mapping(kind="file", source="docs/SKILL.md", target="SKILL.md"),
+    )
+    blob_paths = {
+        "skills/demo/references/guide.md": "sha-guide",
+        "skills/demo/templates/start.sh": "sha-template",
+        "docs/SKILL.md": "sha-skill",
+    }
+
+    snapshot = skill_upgrader.resolve_overlay_snapshot(mappings, blob_paths)
+
+    assert snapshot == {
+        "references/guide.md": "sha-guide",
+        "templates/start.sh": "sha-template",
+        "SKILL.md": "sha-skill",
+    }
+
+
+def test_sync_snapshot_exact_updates_changed_files_and_removes_extra_entries(tmp_path: Path) -> None:
+    local_root = tmp_path / "local"
+    (local_root / "nested").mkdir(parents=True)
+    (local_root / "nested" / "keep.txt").write_text("stale\n", encoding="utf-8")
+    (local_root / "obsolete.txt").write_text("remove me\n", encoding="utf-8")
+
+    expected = {
+        "nested/keep.txt": "sha-keep",
+        "SKILL.md": "sha-skill",
+    }
+    contents = {
+        "sha-keep": b"fresh\n",
+        "sha-skill": b"current\n",
+    }
+
+    skill_upgrader.sync_snapshot_exact(local_root, expected, lambda sha: contents[sha])
+
+    assert not (local_root / "obsolete.txt").exists()
+    assert (local_root / "nested" / "keep.txt").read_text(encoding="utf-8") == "fresh\n"
+    assert (local_root / "SKILL.md").read_text(encoding="utf-8") == "current\n"
+
+
 def test_upgrade_overlay_sync_targets_managed_path_not_projection_path(tmp_path: Path) -> None:
     checkout_root = tmp_path / "checkout"
     (checkout_root / "skill" / "data").mkdir(parents=True)
@@ -333,6 +399,65 @@ def test_inspect_overlay_sync_blocks_upgrade_for_dirty_git_targets(tmp_path: Pat
     assert result["local_state"] == "different-dirty"
     assert result["action"] == "none"
     assert result["destinations"][0]["dirty"] is True
+
+
+def test_upgrade_overlay_sync_gh_api_targets_managed_and_mapping_specific_paths(tmp_path: Path) -> None:
+    projection_root = tmp_path / "projection"
+    projection_root.mkdir()
+    (projection_root / "SKILL.md").write_text("projection\n", encoding="utf-8")
+
+    managed_root = tmp_path / "managed"
+    managed_root.mkdir()
+    (managed_root / "SKILL.md").write_text("old managed\n", encoding="utf-8")
+
+    source_root = tmp_path / "source-root"
+    (source_root / "data").mkdir(parents=True)
+    (source_root / "data" / "catalog.csv").write_text("stale\n", encoding="utf-8")
+
+    skill_content = b"---\nname: sample\ndescription: Use when testing.\n---\n"
+    catalog_content = b"fresh\n"
+    skill_sha = skill_upgrader.git_blob_oid_bytes(skill_content)
+    catalog_sha = skill_upgrader.git_blob_oid_bytes(catalog_content)
+
+    source = skill_upgrader.SourceRepo(repo_url="https://github.com/example/demo.git", ref="main")
+    item = skill_upgrader.ManagedItem(
+        name="sample",
+        kind="overlay_sync",
+        local_path=projection_root,
+        managed_path=managed_root,
+        source=source,
+        mappings=(
+            skill_upgrader.Mapping(kind="file", source="docs/SKILL.md", target="SKILL.md"),
+            skill_upgrader.Mapping(
+                kind="dir_contents",
+                source="src/sample-skill/data",
+                target="data",
+                target_base=source_root,
+            ),
+        ),
+    )
+
+    store = skill_upgrader.RepoCheckoutStore(tmp_path / "checkouts")
+    store.github_trees[("example/demo", "main")] = {
+        "docs/SKILL.md": skill_sha,
+        "src/sample-skill/data/catalog.csv": catalog_sha,
+    }
+    store.github_blobs[("example", "demo", skill_sha)] = skill_content
+    store.github_blobs[("example", "demo", catalog_sha)] = catalog_content
+
+    result = skill_upgrader.upgrade_overlay_sync(
+        item,
+        store,
+        skill_upgrader.LocalMachineConfig(github_overlay_transport="gh_api"),
+    )
+
+    assert result["source"]["transport"] == "gh_api"
+    assert result["local_state"] == "current"
+    assert result["action"] == "none"
+    assert result["changed"] is True
+    assert (managed_root / "SKILL.md").read_text(encoding="utf-8").startswith("---\nname: sample")
+    assert (source_root / "data" / "catalog.csv").read_text(encoding="utf-8") == "fresh\n"
+    assert (projection_root / "SKILL.md").read_text(encoding="utf-8") == "projection\n"
 
 
 def test_inspect_git_repo_detects_repo_behind_upstream(tmp_path: Path) -> None:

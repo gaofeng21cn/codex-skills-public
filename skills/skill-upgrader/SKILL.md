@@ -39,12 +39,24 @@ python3 scripts/skill_upgrader.py upgrade --only superpowers
 python3 scripts/skill_upgrader.py upgrade --only agent-browser --only ui-ux-pro-max
 ```
 
+Local machine overrides:
+
+```bash
+python3 scripts/skill_upgrader.py inspect --local-config local_machine.json
+python3 scripts/skill_upgrader.py upgrade --local-config local_machine.json
+```
+
 ## Workflow
 
 1. Run `inspect` first.
 2. Read the JSON results.
 3. Upgrade only items with `"action": "upgrade"`.
 4. Re-run `inspect` to confirm they are now current.
+
+On this Mac, `local_machine.json` records the verified GitHub fast path:
+- `git_repo` items fetch via GitHub SSH and fast-forward from `FETCH_HEAD`
+- `overlay_sync` items compare/sync via `gh api` tree/blob data instead of `git clone`
+- If the local config file is absent, the helper falls back to the original `git fetch` / `git clone` behavior
 
 ## Safety Rules
 

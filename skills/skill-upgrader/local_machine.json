@@ -1,0 +1,8 @@
+{
+  "github": {
+    "overlay_transport": "gh_api",
+    "git_repo_transport": "ssh_fetch",
+    "ssh_strict_host_key_checking": "accept-new",
+    "ssh_connect_timeout_seconds": 15
+  }
+}
