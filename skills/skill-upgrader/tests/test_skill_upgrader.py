@@ -212,6 +212,49 @@ def test_load_local_machine_config_reads_github_overrides(tmp_path: Path) -> Non
     assert config.ssh_connect_timeout_seconds == 12
 
 
+def test_load_local_machine_config_reads_private_skills_manager_settings(tmp_path: Path, monkeypatch) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+
+    public_config_path = tmp_path / "local_machine.json"
+    public_config_path.write_text(
+        json.dumps(
+            {
+                "github": {
+                    "overlay_transport": "gh_api",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    private_config_path = tmp_path / "local_machine.private.json"
+    private_config_path.write_text(
+        json.dumps(
+            {
+                "skills_manager": {
+                    "library_remote": "git@github.com:example/private-library.git",
+                    "library_branch": "stable",
+                    "library_dir": "~/custom/skills",
+                    "bootstrap_base_dir": "~/custom",
+                    "bootstrap_script": "~/custom/skills/maintenance/bootstrap.py",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = skill_upgrader.load_local_machine_config(public_config_path, private_config_path)
+
+    assert config.github_overlay_transport == "gh_api"
+    assert config.private_config_path == private_config_path.resolve()
+    assert config.library_remote == "git@github.com:example/private-library.git"
+    assert config.library_branch == "stable"
+    assert config.library_dir == home_dir / "custom" / "skills"
+    assert config.bootstrap_base_dir == home_dir / "custom"
+    assert config.bootstrap_script == home_dir / "custom" / "skills" / "maintenance" / "bootstrap.py"
+
+
 def test_resolve_overlay_snapshot_maps_file_and_dir_contents_targets() -> None:
     mappings = (
         skill_upgrader.Mapping(kind="dir_contents", source="skills/demo", target="."),
@@ -505,3 +548,184 @@ def test_inspect_git_repo_detects_repo_behind_upstream(tmp_path: Path) -> None:
     assert result["kind"] == "git_repo"
     assert result["local_state"] == "behind"
     assert result["action"] == "upgrade"
+
+
+def test_bootstrap_manager_db_runs_script_with_reset_and_base_dir(tmp_path: Path) -> None:
+    base_dir = tmp_path / "skills-manager"
+    base_dir.mkdir()
+    script_path = tmp_path / "bootstrap.py"
+    args_log_path = tmp_path / "bootstrap-args.json"
+    script_path.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env python3",
+                "from __future__ import annotations",
+                "import json",
+                "import sys",
+                "from pathlib import Path",
+                f"Path({str(args_log_path)!r}).write_text(json.dumps(sys.argv[1:]), encoding='utf-8')",
+                "print(json.dumps({'ok': True}, ensure_ascii=False))",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    script_path.chmod(0o755)
+
+    config = skill_upgrader.LocalMachineConfig(
+        bootstrap_base_dir=base_dir,
+        bootstrap_script=script_path,
+    )
+
+    result = skill_upgrader.bootstrap_manager_db(config)
+
+    assert json.loads(args_log_path.read_text(encoding="utf-8")) == [
+        "--base-dir",
+        str(base_dir),
+        "--reset",
+    ]
+    assert result["base_dir"] == str(base_dir)
+    assert result["script"] == str(script_path)
+    assert result["reset"] is True
+
+
+def test_library_pull_clones_repo_and_runs_bootstrap(tmp_path: Path) -> None:
+    remote_bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", str(remote_bare)], check=True, text=True, capture_output=True)
+
+    seed_repo = tmp_path / "seed"
+    subprocess.run(["git", "clone", str(remote_bare), str(seed_repo)], check=True, text=True, capture_output=True)
+    configure_git_user(seed_repo)
+    run_git(["checkout", "-b", "main"], cwd=seed_repo)
+    (seed_repo / "README.md").write_text("seed\n", encoding="utf-8")
+    run_git(["add", "README.md"], cwd=seed_repo)
+    run_git(["commit", "-m", "seed"], cwd=seed_repo)
+    run_git(["push", "-u", "origin", "main"], cwd=seed_repo)
+    subprocess.run(
+        ["git", f"--git-dir={remote_bare}", "symbolic-ref", "HEAD", "refs/heads/main"],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    base_dir = tmp_path / "skills-manager"
+    library_dir = base_dir / "skills"
+    base_dir.mkdir()
+    script_path = tmp_path / "bootstrap.py"
+    marker_path = tmp_path / "bootstrap-ran.txt"
+    script_path.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env python3",
+                "from __future__ import annotations",
+                "import sys",
+                "from pathlib import Path",
+                f"Path({str(marker_path)!r}).write_text(' '.join(sys.argv[1:]), encoding='utf-8')",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    script_path.chmod(0o755)
+
+    config = skill_upgrader.LocalMachineConfig(
+        library_dir=library_dir,
+        library_remote=str(remote_bare),
+        library_branch="main",
+        bootstrap_base_dir=base_dir,
+        bootstrap_script=script_path,
+    )
+
+    result = skill_upgrader.library_pull(config)
+
+    assert result["action"] == "clone"
+    assert result["changed"] is True
+    assert (library_dir / "README.md").read_text(encoding="utf-8") == "seed\n"
+    assert marker_path.read_text(encoding="utf-8") == f"--base-dir {base_dir} --reset"
+
+
+def test_library_push_commits_dirty_library_and_pushes(tmp_path: Path) -> None:
+    remote_bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", str(remote_bare)], check=True, text=True, capture_output=True)
+
+    seed_repo = tmp_path / "seed"
+    subprocess.run(["git", "clone", str(remote_bare), str(seed_repo)], check=True, text=True, capture_output=True)
+    configure_git_user(seed_repo)
+    run_git(["checkout", "-b", "main"], cwd=seed_repo)
+    (seed_repo / "README.md").write_text("seed\n", encoding="utf-8")
+    run_git(["add", "README.md"], cwd=seed_repo)
+    run_git(["commit", "-m", "seed"], cwd=seed_repo)
+    run_git(["push", "-u", "origin", "main"], cwd=seed_repo)
+    subprocess.run(
+        ["git", f"--git-dir={remote_bare}", "symbolic-ref", "HEAD", "refs/heads/main"],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    library_dir = tmp_path / "library"
+    subprocess.run(["git", "clone", str(remote_bare), str(library_dir)], check=True, text=True, capture_output=True)
+    configure_git_user(library_dir)
+    (library_dir / "README.md").write_text("seed\nlocal change\n", encoding="utf-8")
+
+    config = skill_upgrader.LocalMachineConfig(
+        library_dir=library_dir,
+        library_remote=str(remote_bare),
+        library_branch="main",
+    )
+
+    result = skill_upgrader.library_push(config, message="sync library")
+
+    assert result["changed"] is True
+    assert result["commit_created"] is True
+    assert run_git(["log", "-1", "--pretty=%s"], cwd=library_dir) == "sync library"
+
+    verify_repo = tmp_path / "verify"
+    subprocess.run(["git", "clone", str(remote_bare), str(verify_repo)], check=True, text=True, capture_output=True)
+    assert (verify_repo / "README.md").read_text(encoding="utf-8") == "seed\nlocal change\n"
+
+
+def test_library_push_rejects_repo_behind_upstream(tmp_path: Path) -> None:
+    remote_bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", str(remote_bare)], check=True, text=True, capture_output=True)
+
+    seed_repo = tmp_path / "seed"
+    subprocess.run(["git", "clone", str(remote_bare), str(seed_repo)], check=True, text=True, capture_output=True)
+    configure_git_user(seed_repo)
+    run_git(["checkout", "-b", "main"], cwd=seed_repo)
+    (seed_repo / "README.md").write_text("seed\n", encoding="utf-8")
+    run_git(["add", "README.md"], cwd=seed_repo)
+    run_git(["commit", "-m", "seed"], cwd=seed_repo)
+    run_git(["push", "-u", "origin", "main"], cwd=seed_repo)
+    subprocess.run(
+        ["git", f"--git-dir={remote_bare}", "symbolic-ref", "HEAD", "refs/heads/main"],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    library_dir = tmp_path / "library"
+    subprocess.run(["git", "clone", str(remote_bare), str(library_dir)], check=True, text=True, capture_output=True)
+    configure_git_user(library_dir)
+
+    updater_repo = tmp_path / "updater"
+    subprocess.run(["git", "clone", str(remote_bare), str(updater_repo)], check=True, text=True, capture_output=True)
+    configure_git_user(updater_repo)
+    (updater_repo / "README.md").write_text("seed\nupstream\n", encoding="utf-8")
+    run_git(["add", "README.md"], cwd=updater_repo)
+    run_git(["commit", "-m", "upstream"], cwd=updater_repo)
+    run_git(["push", "origin", "main"], cwd=updater_repo)
+
+    (library_dir / "README.md").write_text("seed\nlocal dirty\n", encoding="utf-8")
+    config = skill_upgrader.LocalMachineConfig(
+        library_dir=library_dir,
+        library_remote=str(remote_bare),
+        library_branch="main",
+    )
+
+    try:
+        skill_upgrader.library_push(config, message="should fail")
+    except RuntimeError as exc:
+        assert "behind" in str(exc)
+    else:
+        raise AssertionError("expected library_push to reject behind repository")

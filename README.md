@@ -21,7 +21,7 @@ This repo is useful if you:
 | Skill | Purpose | Typical use |
 | --- | --- | --- |
 | `apple-apps` | Apple Mail automation helpers on macOS | inspect inboxes, search messages, read or mutate messages in Mail.app |
-| `skill-upgrader` | Inspect and upgrade managed local skills and `~/.codex/superpowers` from explicit upstream sources | check what can be upgraded, then run deterministic upgrades without re-mapping sources manually |
+| `skill-upgrader` | Inspect and upgrade managed local skills from explicit upstream sources, then sync a Skills Manager central library across machines | refresh upstream-managed skills on one machine, push them into a central library repo, and pull them on other machines |
 
 ## Quick Start
 
@@ -40,6 +40,8 @@ python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github
 ```
 
 After installation, restart Codex or start a new session so the new skill is picked up reliably.
+
+`skill-upgrader` can also drive a `Skills Manager` central library workflow. Keep the private library remote in `~/.skills-manager/local_machine.private.json`, not in this public repository.
 
 ## Repository Layout
 

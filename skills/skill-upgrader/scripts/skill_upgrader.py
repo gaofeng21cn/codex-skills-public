@@ -9,7 +9,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
@@ -17,6 +17,11 @@ from urllib.parse import urlparse
 
 DEFAULT_MANIFEST = Path(__file__).resolve().parents[1] / "sources.json"
 DEFAULT_LOCAL_CONFIG = Path(__file__).resolve().parents[1] / "local_machine.json"
+DEFAULT_PRIVATE_CONFIG = Path("~/.skills-manager/local_machine.private.json").expanduser().resolve(strict=False)
+DEFAULT_LIBRARY_DIR = Path("~/.skills-manager/skills").expanduser().resolve(strict=False)
+DEFAULT_BOOTSTRAP_BASE_DIR = Path("~/.skills-manager").expanduser().resolve(strict=False)
+DEFAULT_LIBRARY_BRANCH = "main"
+DEFAULT_LIBRARY_COMMIT_MESSAGE = "chore: sync skills library"
 
 
 @dataclass(frozen=True)
@@ -55,6 +60,14 @@ class LocalMachineConfig:
     github_git_repo_transport: str = "git_fetch"
     ssh_strict_host_key_checking: str = "accept-new"
     ssh_connect_timeout_seconds: int = 15
+    private_config_path: Path = field(default_factory=lambda: DEFAULT_PRIVATE_CONFIG)
+    library_dir: Path = field(default_factory=lambda: DEFAULT_LIBRARY_DIR)
+    library_remote: str | None = None
+    library_branch: str = DEFAULT_LIBRARY_BRANCH
+    bootstrap_base_dir: Path = field(default_factory=lambda: DEFAULT_BOOTSTRAP_BASE_DIR)
+    bootstrap_script: Path = field(
+        default_factory=lambda: default_bootstrap_script_path(DEFAULT_LIBRARY_DIR)
+    )
 
 
 @dataclass
@@ -143,11 +156,35 @@ def parse_args() -> argparse.Namespace:
         default=str(DEFAULT_LOCAL_CONFIG),
         help="Path to the local machine configuration file.",
     )
+    parser.add_argument(
+        "--private-config",
+        default=str(DEFAULT_PRIVATE_CONFIG),
+        help="Path to the private machine configuration file.",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     for name in ("inspect", "upgrade"):
         sub = subparsers.add_parser(name)
         sub.add_argument("--only", action="append", default=[], help="Limit to selected managed item names.")
+
+    library_push = subparsers.add_parser("library-push")
+    library_push.add_argument("--message", help="Commit message to use when the library repo is dirty.")
+    library_push.add_argument("--library-dir", help="Override the Skills Manager library directory.")
+    library_push.add_argument("--library-remote", help="Override the library git remote URL.")
+    library_push.add_argument("--library-branch", help="Override the library git branch.")
+
+    library_pull = subparsers.add_parser("library-pull")
+    library_pull.add_argument("--skip-bootstrap", action="store_true", help="Skip Skills Manager DB bootstrap.")
+    library_pull.add_argument("--library-dir", help="Override the Skills Manager library directory.")
+    library_pull.add_argument("--library-remote", help="Override the library git remote URL.")
+    library_pull.add_argument("--library-branch", help="Override the library git branch.")
+    library_pull.add_argument("--bootstrap-base-dir", help="Override the Skills Manager base directory.")
+    library_pull.add_argument("--bootstrap-script", help="Override the bootstrap script path.")
+
+    bootstrap = subparsers.add_parser("bootstrap-manager-db")
+    bootstrap.add_argument("--no-reset", action="store_true", help="Do not pass --reset to the bootstrap script.")
+    bootstrap.add_argument("--bootstrap-base-dir", help="Override the Skills Manager base directory.")
+    bootstrap.add_argument("--bootstrap-script", help="Override the bootstrap script path.")
 
     return parser.parse_args()
 
@@ -172,6 +209,14 @@ def try_run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedPro
         text=True,
         capture_output=True,
     )
+
+
+def expand_path(path_str: str) -> Path:
+    return Path(path_str).expanduser().resolve(strict=False)
+
+
+def default_bootstrap_script_path(library_dir: Path) -> Path:
+    return (library_dir / "maintenance" / "bootstrap_xingkongliang_db.py").resolve(strict=False)
 
 
 def load_manifest(path: Path) -> list[ManagedItem]:
@@ -212,16 +257,40 @@ def load_manifest(path: Path) -> list[ManagedItem]:
     return items
 
 
-def load_local_machine_config(path: Path) -> LocalMachineConfig:
-    if not path.exists():
-        return LocalMachineConfig()
-    data = json.loads(path.read_text(encoding="utf-8"))
-    github = data.get("github", {})
+def load_local_machine_config(path: Path, private_path: Path | None = None) -> LocalMachineConfig:
+    public_data: dict[str, object] = {}
+    if path.exists():
+        public_data = json.loads(path.read_text(encoding="utf-8"))
+    resolved_private_path = (
+        private_path.expanduser().resolve(strict=False) if private_path is not None else DEFAULT_PRIVATE_CONFIG
+    )
+    private_data: dict[str, object] = {}
+    if resolved_private_path.exists():
+        private_data = json.loads(resolved_private_path.read_text(encoding="utf-8"))
+
+    github = public_data.get("github", {})
+    public_skills_manager = public_data.get("skills_manager", {})
+    private_skills_manager = private_data.get("skills_manager", {})
+    merged_skills_manager = {**public_skills_manager, **private_skills_manager}
+    library_dir = expand_path(merged_skills_manager.get("library_dir", str(DEFAULT_LIBRARY_DIR)))
+    bootstrap_base_dir = expand_path(
+        merged_skills_manager.get("bootstrap_base_dir", str(DEFAULT_BOOTSTRAP_BASE_DIR))
+    )
+    bootstrap_script_raw = merged_skills_manager.get(
+        "bootstrap_script",
+        str(default_bootstrap_script_path(library_dir)),
+    )
     return LocalMachineConfig(
         github_overlay_transport=github.get("overlay_transport", "git_clone"),
         github_git_repo_transport=github.get("git_repo_transport", "git_fetch"),
         ssh_strict_host_key_checking=github.get("ssh_strict_host_key_checking", "accept-new"),
         ssh_connect_timeout_seconds=github.get("ssh_connect_timeout_seconds", 15),
+        private_config_path=resolved_private_path,
+        library_dir=library_dir,
+        library_remote=merged_skills_manager.get("library_remote"),
+        library_branch=merged_skills_manager.get("library_branch", DEFAULT_LIBRARY_BRANCH),
+        bootstrap_base_dir=bootstrap_base_dir,
+        bootstrap_script=expand_path(bootstrap_script_raw),
     )
 
 
@@ -234,6 +303,26 @@ def select_items(items: list[ManagedItem], selected: list[str]) -> list[ManagedI
     if missing:
         raise ValueError(f"unknown managed item(s): {', '.join(missing)}")
     return chosen
+
+
+def override_local_machine_config(config: LocalMachineConfig, args: argparse.Namespace) -> LocalMachineConfig:
+    updates: dict[str, object] = {}
+    library_dir_override = getattr(args, "library_dir", None)
+    bootstrap_script_override = getattr(args, "bootstrap_script", None)
+    if library_dir_override:
+        new_library_dir = expand_path(library_dir_override)
+        updates["library_dir"] = new_library_dir
+        if config.bootstrap_script == default_bootstrap_script_path(config.library_dir) and not bootstrap_script_override:
+            updates["bootstrap_script"] = default_bootstrap_script_path(new_library_dir)
+    if getattr(args, "library_remote", None):
+        updates["library_remote"] = args.library_remote
+    if getattr(args, "library_branch", None):
+        updates["library_branch"] = args.library_branch
+    if getattr(args, "bootstrap_base_dir", None):
+        updates["bootstrap_base_dir"] = expand_path(args.bootstrap_base_dir)
+    if bootstrap_script_override:
+        updates["bootstrap_script"] = expand_path(bootstrap_script_override)
+    return replace(config, **updates) if updates else config
 
 
 def sha256_file(path: Path) -> str:
@@ -488,6 +577,175 @@ def git_ssh_env(config: LocalMachineConfig) -> dict[str, str]:
         f"-o ConnectTimeout={config.ssh_connect_timeout_seconds}"
     )
     return env
+
+
+def maybe_git_transport_env(remote_url: str, config: LocalMachineConfig) -> dict[str, str] | None:
+    if parse_github_repo(remote_url) is None:
+        return None
+    return git_ssh_env(config)
+
+
+def repo_remote_url(repo_path: Path, remote: str = "origin") -> str | None:
+    result = try_run(["git", "-C", str(repo_path), "remote", "get-url", remote])
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
+def require_repo_root(path: Path, label: str) -> Path:
+    repo_root = git_repo_root(path)
+    if repo_root is None:
+        raise RuntimeError(f"{label} 不是 git 仓库: {path}")
+    resolved_repo_root = repo_root.resolve(strict=False)
+    resolved_path = path.resolve(strict=False)
+    if resolved_repo_root != resolved_path:
+        raise RuntimeError(f"{label} 必须是 git 仓根目录: {path}")
+    return resolved_repo_root
+
+
+def require_library_remote(config: LocalMachineConfig, repo_path: Path | None = None) -> str:
+    configured = config.library_remote
+    actual = repo_remote_url(repo_path) if repo_path is not None and repo_path.exists() else None
+    if configured and actual and configured != actual:
+        raise RuntimeError(f"library remote 不匹配: expected={configured} actual={actual}")
+    if configured:
+        return configured
+    if actual:
+        return actual
+    raise RuntimeError(
+        f"未配置 library_remote。请在 {config.private_config_path} 中设置 skills_manager.library_remote。"
+    )
+
+
+def managed_library_item(config: LocalMachineConfig) -> ManagedItem:
+    return ManagedItem(
+        name="skills-manager-library",
+        kind="git_repo",
+        local_path=config.library_dir,
+        remote="origin",
+        branch=config.library_branch,
+    )
+
+
+def default_library_commit_message() -> str:
+    return DEFAULT_LIBRARY_COMMIT_MESSAGE
+
+
+def maybe_parse_json_output(output: str) -> object:
+    if not output:
+        return None
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError:
+        return output
+
+
+def bootstrap_manager_db(config: LocalMachineConfig, reset: bool = True) -> dict[str, object]:
+    script_path = config.bootstrap_script
+    if not script_path.is_file():
+        raise RuntimeError(f"bootstrap script 不存在: {script_path}")
+    args = ["python3", str(script_path), "--base-dir", str(config.bootstrap_base_dir)]
+    if reset:
+        args.append("--reset")
+    output = run(args)
+    return {
+        "script": str(script_path),
+        "base_dir": str(config.bootstrap_base_dir),
+        "reset": reset,
+        "output": maybe_parse_json_output(output),
+    }
+
+
+def library_pull(config: LocalMachineConfig, skip_bootstrap: bool = False) -> dict[str, object]:
+    library_dir = config.library_dir
+    remote_url = require_library_remote(config, library_dir if library_dir.exists() else None)
+    remote_env = maybe_git_transport_env(remote_url, config)
+
+    if not library_dir.exists():
+        library_dir.parent.mkdir(parents=True, exist_ok=True)
+        run(
+            ["git", "clone", "--branch", config.library_branch, remote_url, str(library_dir)],
+            env=remote_env,
+        )
+        result: dict[str, object] = {
+            "name": "skills-manager-library",
+            "kind": "git_repo",
+            "local_path": str(library_dir),
+            "remote": remote_url,
+            "branch": config.library_branch,
+            "local_state": "current",
+            "action": "clone",
+            "changed": True,
+        }
+    else:
+        require_repo_root(library_dir, "library_dir")
+        require_library_remote(config, library_dir)
+        inspected = inspect_git_repo(managed_library_item(config), config)
+        if inspected["dirty"]:
+            raise RuntimeError(f"library repo 有未提交变更，不能执行 pull: {library_dir}")
+        if inspected["local_state"] == "ahead":
+            raise RuntimeError(f"library repo 比远端超前，不能执行 pull: {library_dir}")
+        if inspected["local_state"] == "diverged":
+            raise RuntimeError(f"library repo 与远端分叉，不能执行 pull: {library_dir}")
+        if inspected["action"] == "upgrade":
+            result = upgrade_git_repo(managed_library_item(config), config)
+            result["action"] = "pull"
+        else:
+            result = inspected
+            result["changed"] = False
+
+    if not skip_bootstrap:
+        result["bootstrap"] = bootstrap_manager_db(config, reset=True)
+    return result
+
+
+def library_push(config: LocalMachineConfig, message: str | None = None) -> dict[str, object]:
+    library_dir = config.library_dir
+    require_repo_root(library_dir, "library_dir")
+    remote_url = require_library_remote(config, library_dir)
+    remote_env = maybe_git_transport_env(remote_url, config)
+
+    inspected = inspect_git_repo(managed_library_item(config), config)
+    if inspected["local_state"] in {"behind", "behind-dirty"}:
+        raise RuntimeError(f"library repo 落后于远端，不能执行 push: state={inspected['local_state']}")
+    if inspected["local_state"] == "diverged":
+        raise RuntimeError("library repo 与远端分叉，不能执行 push")
+
+    commit_created = False
+    if inspected["dirty"]:
+        run(["git", "-C", str(library_dir), "add", "--all"])
+        run(
+            ["git", "-C", str(library_dir), "commit", "-m", message or default_library_commit_message()],
+            env=remote_env,
+        )
+        commit_created = True
+
+    refreshed = inspect_git_repo(managed_library_item(config), config)
+    if refreshed["dirty"]:
+        raise RuntimeError("library repo 提交后仍然存在未提交变更")
+    if refreshed["local_state"] == "diverged":
+        raise RuntimeError("library repo 提交后与远端分叉，不能执行 push")
+    if refreshed["local_state"] in {"behind", "behind-dirty"}:
+        raise RuntimeError(f"library repo 落后于远端，不能执行 push: state={refreshed['local_state']}")
+
+    pushed = False
+    if refreshed["local_state"] == "ahead":
+        run(["git", "-C", str(library_dir), "push", "origin", config.library_branch], env=remote_env)
+        pushed = True
+        refreshed = inspect_git_repo(managed_library_item(config), config)
+
+    return {
+        "name": "skills-manager-library",
+        "kind": "git_repo",
+        "local_path": str(library_dir),
+        "remote": remote_url,
+        "branch": config.library_branch,
+        "local_state": refreshed["local_state"],
+        "action": "push" if pushed else "none",
+        "changed": commit_created or pushed,
+        "commit_created": commit_created,
+        "pushed": pushed,
+    }
 
 
 def resolve_overlay_snapshot(
@@ -767,22 +1025,51 @@ def main() -> int:
     args = parse_args()
     manifest_path = Path(args.sources).expanduser().resolve()
     local_config_path = Path(args.local_config).expanduser().resolve()
-    items = select_items(load_manifest(manifest_path), args.only)
-    config = load_local_machine_config(local_config_path)
+    private_config_path = Path(args.private_config).expanduser().resolve()
+    config = load_local_machine_config(local_config_path, private_config_path)
+    config = override_local_machine_config(config, args)
+
+    if args.command in {"inspect", "upgrade"}:
+        items = select_items(load_manifest(manifest_path), args.only)
+    else:
+        items = []
 
     if args.command == "inspect":
         payload = {
             "command": "inspect",
             "sources": str(manifest_path),
             "local_config": str(local_config_path),
+            "private_config": str(private_config_path),
             "results": inspect_items(items, config),
         }
-    else:
+    elif args.command == "upgrade":
         payload = {
             "command": "upgrade",
             "sources": str(manifest_path),
             "local_config": str(local_config_path),
+            "private_config": str(private_config_path),
             "results": upgrade_items(items, config),
+        }
+    elif args.command == "library-pull":
+        payload = {
+            "command": "library-pull",
+            "local_config": str(local_config_path),
+            "private_config": str(private_config_path),
+            "result": library_pull(config, skip_bootstrap=args.skip_bootstrap),
+        }
+    elif args.command == "library-push":
+        payload = {
+            "command": "library-push",
+            "local_config": str(local_config_path),
+            "private_config": str(private_config_path),
+            "result": library_push(config, message=args.message),
+        }
+    else:
+        payload = {
+            "command": "bootstrap-manager-db",
+            "local_config": str(local_config_path),
+            "private_config": str(private_config_path),
+            "result": bootstrap_manager_db(config, reset=not args.no_reset),
         }
 
     print(json.dumps(payload, indent=2, sort_keys=False))

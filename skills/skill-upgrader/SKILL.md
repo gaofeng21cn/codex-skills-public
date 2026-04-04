@@ -1,13 +1,18 @@
 ---
 name: skill-upgrader
-description: Use when inspecting or upgrading managed local Codex skills and the local superpowers repo against explicit upstream sources, especially when you want to avoid re-deriving source mappings by hand.
+description: Use when inspecting or upgrading managed local Codex skills against explicit upstream sources, or when syncing a Skills Manager central library across machines without re-deriving source mappings by hand.
 ---
 
 # Skill Upgrader
 
 ## Overview
 
-This skill manages a fixed set of local Codex skills plus `~/.codex/superpowers` using an explicit source manifest. It is for deterministic inspection and upgrade, not source discovery.
+This skill manages two related jobs:
+
+- refresh a fixed set of managed local skills plus `~/.codex/superpowers` from explicit upstream sources
+- sync a `Skills Manager` central library repo in `~/.skills-manager/skills` across machines
+
+It is for deterministic upgrade and sync, not source discovery.
 
 When a visible install path is a symlink or projected skill view, do not upgrade the symlink entrypoint blindly. Use item-level `managed_path` when the whole skill has one real source-of-truth directory, or use mapping-level `target_base` when different parts of the skill belong to different real directories.
 
@@ -15,6 +20,7 @@ When a visible install path is a symlink or projected skill view, do not upgrade
 
 - User asks which installed skills can be upgraded
 - User asks to upgrade managed skills to the latest known upstream versions
+- User wants one machine to refresh skills and all other machines to stay in sync through `Skills Manager`
 - You want a fast, repeatable alternative to manually re-mapping skill origins
 
 Do not use this skill to guess where an unknown skill came from.
@@ -39,24 +45,53 @@ python3 scripts/skill_upgrader.py upgrade --only superpowers
 python3 scripts/skill_upgrader.py upgrade --only agent-browser --only ui-ux-pro-max
 ```
 
-Local machine overrides:
+Sync the `Skills Manager` central library:
+
+```bash
+python3 scripts/skill_upgrader.py library-push
+python3 scripts/skill_upgrader.py library-pull
+python3 scripts/skill_upgrader.py bootstrap-manager-db
+```
+
+Local machine config:
 
 ```bash
 python3 scripts/skill_upgrader.py inspect --local-config local_machine.json
 python3 scripts/skill_upgrader.py upgrade --local-config local_machine.json
+python3 scripts/skill_upgrader.py library-pull --private-config ~/.skills-manager/local_machine.private.json
 ```
 
 ## Workflow
 
-1. Run `inspect` first.
-2. Read the JSON results.
-3. Upgrade only items with `"action": "upgrade"`.
-4. Re-run `inspect` to confirm they are now current.
+Create this private config once per machine:
+
+```json
+{
+  "skills_manager": {
+    "library_remote": "git@github.com:<owner>/<private-library>.git",
+    "library_branch": "main"
+  }
+}
+```
+
+Save it at `~/.skills-manager/local_machine.private.json`.
+
+Recommended day-to-day usage:
+
+1. On the machine that refreshes upstream skills:
+   - run `python3 scripts/skill_upgrader.py upgrade`
+   - then run `python3 scripts/skill_upgrader.py library-push`
+2. On every other machine:
+   - run `python3 scripts/skill_upgrader.py library-pull`
+3. If `Skills Manager` metadata looks stale on any machine:
+   - run `python3 scripts/skill_upgrader.py bootstrap-manager-db`
 
 On this Mac, `local_machine.json` records the verified GitHub fast path:
 - `git_repo` items fetch via GitHub SSH and fast-forward from `FETCH_HEAD`
 - `overlay_sync` items compare/sync via `gh api` tree/blob data instead of `git clone`
 - If the local config file is absent, the helper falls back to the original `git fetch` / `git clone` behavior
+
+Sensitive settings such as the private library remote must stay in `~/.skills-manager/local_machine.private.json`, not in this public repo.
 
 ## Safety Rules
 
@@ -67,6 +102,9 @@ On this Mac, `local_machine.json` records the verified GitHub fast path:
 - If an overlay target path is dirty inside a git worktree, inspect must report that state and block upgrade instead of overwriting local changes.
 - If a target is dirty, ahead, or diverged, report that state instead of forcing an upgrade.
 - `overlay_sync` targets are exact mirrors of declared upstream mappings. Local drift in those directories is removed on upgrade.
+- `library-pull` only clones or fast-forwards. It must not auto-merge.
+- `library-push` must fail if the library repo is behind or diverged.
+- `bootstrap-manager-db` rebuilds `skills-manager.db` from the central library and defaults to `--reset`.
 
 ## Current Managed Targets
 
