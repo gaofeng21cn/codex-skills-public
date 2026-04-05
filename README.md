@@ -23,6 +23,15 @@ This repo is useful if you:
 | `apple-apps` | Apple Mail automation helpers on macOS | inspect inboxes, search messages, read or mutate messages in Mail.app |
 | `skill-upgrader` | Inspect and upgrade managed local skills from explicit upstream sources, then sync a Skills Manager central library across machines | refresh upstream-managed skills on one machine, push them into a central library repo, and pull them on other machines |
 
+## External Tools
+
+Some heavier tools are intentionally maintained in standalone repositories instead of this catalog. Current example:
+
+- [`gaofeng21cn/omx-project-installer`](https://github.com/gaofeng21cn/omx-project-installer)
+  - A compatibility-focused OMX project-scope installer that keeps repository-root `AGENTS.md` App-native, writes OMX orchestration into `./.codex/AGENTS.md`, reconciles system-level model/provider config into project scope, and repairs legacy alias issues until upstream OMX releases fully absorb those fixes.
+
+This stays separate because it is more than a single lightweight skill directory: it ships templates, examples, tests, install scripts, and upstream-compatibility logic as one coherent tool.
+
 ## Quick Start
 
 Install a skill from this repo with Codex's GitHub installer:
