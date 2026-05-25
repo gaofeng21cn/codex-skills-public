@@ -20,6 +20,7 @@ This repo is useful if you:
 
 | Skill | Purpose | Typical use |
 | --- | --- | --- |
+| `academic-defense-prep` | Turn academic and medical-research materials into defense deliverables | draft timed oral scripts, PPT speaker notes, storyline rewrites, and reviewer-facing questions |
 | `apple-apps` | Apple Mail automation helpers on macOS | inspect inboxes, search messages, read or mutate messages in Mail.app |
 | `skill-upgrader` | Inspect and upgrade managed local skills from explicit upstream sources, then sync a Skills Manager central library across machines | refresh upstream-managed skills on one machine, push them into a central library repo, and pull them on other machines |
 
@@ -35,6 +36,12 @@ This stays separate because it is more than a single lightweight skill directory
 ## Quick Start
 
 Install a skill from this repo with Codex's GitHub installer:
+
+```bash
+python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
+  --repo gaofeng21cn/codex-skills-public \
+  --path skills/academic-defense-prep
+```
 
 ```bash
 python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \

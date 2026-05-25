@@ -1,0 +1,4 @@
+interface:
+  display_name: "Academic Defense Prep"
+  short_description: "Timed scripts, notes, and reviewer questions"
+  default_prompt: "Use $academic-defense-prep to turn a PPT, thesis, or proposal package into a paced defense script, speaker notes, or reviewer questions."
