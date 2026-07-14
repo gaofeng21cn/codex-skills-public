@@ -46,6 +46,7 @@ class ManagedItem:
     managed_path: Path | None = None
     source: SourceRepo | None = None
     mappings: tuple[Mapping, ...] = ()
+    local_overrides: tuple[str, ...] = ()
     remote: str = "origin"
     branch: str = "main"
 
@@ -250,6 +251,7 @@ def load_manifest(path: Path) -> list[ManagedItem]:
                 managed_path=managed_path,
                 source=source,
                 mappings=mappings,
+                local_overrides=tuple(raw.get("local_overrides", ())),
                 remote=raw.get("remote", "origin"),
                 branch=raw.get("branch", "main"),
             )
@@ -401,7 +403,7 @@ def git_repo_root(path: Path) -> Path | None:
     return Path(result.stdout.strip())
 
 
-def git_subtree_dirty(path: Path) -> bool:
+def git_subtree_dirty(path: Path, ignored_rel_paths: tuple[str, ...] = ()) -> bool:
     repo_root = git_repo_root(path)
     if repo_root is None:
         return False
@@ -413,7 +415,36 @@ def git_subtree_dirty(path: Path) -> bool:
     result = try_run(
         ["git", "-C", str(repo_root), "status", "--short", "--untracked-files=all", "--", pathspec]
     )
-    return bool(result.stdout.strip())
+    if not ignored_rel_paths:
+        return bool(result.stdout.strip())
+    ignored_repo_paths = {
+        (rel_path / ignored).as_posix() if rel_path != Path(".") else ignored
+        for ignored in ignored_rel_paths
+    }
+    for line in result.stdout.splitlines():
+        changed_path = line[3:].strip()
+        if " -> " in changed_path:
+            changed_path = changed_path.rsplit(" -> ", 1)[1]
+        if changed_path not in ignored_repo_paths:
+            return True
+    return False
+
+
+def apply_local_overrides(diff: dict[str, object], overrides: tuple[str, ...]) -> dict[str, object]:
+    if not overrides:
+        return diff
+    ignored = set(overrides)
+    only_local = [path for path in diff["only_local"] if path not in ignored]
+    only_expected = [path for path in diff["only_expected"] if path not in ignored]
+    changed = [path for path in diff["changed"] if path not in ignored]
+    return {
+        **diff,
+        "match": not only_local and not only_expected and not changed,
+        "only_local": only_local,
+        "only_expected": only_expected,
+        "changed": changed,
+        "local_overrides": sorted(ignored),
+    }
 
 
 def result_paths(item: ManagedItem) -> dict[str, str]:
@@ -503,17 +534,23 @@ def prune_empty_dirs(root: Path) -> None:
             continue
 
 
-def sync_tree_exact(stage_root: Path, local_root: Path) -> None:
+def sync_tree_exact(stage_root: Path, local_root: Path, ignored_rel_paths: tuple[str, ...] = ()) -> None:
     local_root.mkdir(parents=True, exist_ok=True)
+    ignored = set(ignored_rel_paths)
 
     expected_entries = {path.relative_to(stage_root).as_posix() for path in stage_root.rglob("*")}
     local_entries = {path.relative_to(local_root).as_posix() for path in local_root.rglob("*")}
 
     for rel in sorted(local_entries - expected_entries, reverse=True):
+        if rel in ignored:
+            continue
         remove_path(local_root / rel)
 
     for path in sorted(stage_root.rglob("*")):
         rel = path.relative_to(stage_root)
+        rel_posix = rel.as_posix()
+        if rel_posix in ignored:
+            continue
         target = local_root / rel
         if path.is_dir():
             target.mkdir(parents=True, exist_ok=True)
@@ -525,14 +562,20 @@ def sync_snapshot_exact(
     local_root: Path,
     expected_snapshot: dict[str, str],
     content_loader: Callable[[str], bytes],
+    ignored_rel_paths: tuple[str, ...] = (),
 ) -> None:
     local_root.mkdir(parents=True, exist_ok=True)
     local_snapshot = snapshot_tree_git_blob_oids(local_root)
+    ignored = set(ignored_rel_paths)
 
     for rel in sorted(local_snapshot.keys() - expected_snapshot.keys(), reverse=True):
+        if rel in ignored:
+            continue
         remove_path(local_root / rel)
 
     for rel in sorted(expected_snapshot.keys()):
+        if rel in ignored:
+            continue
         target = local_root / rel
         expected_oid = expected_snapshot[rel]
         current_oid = local_snapshot.get(rel)
@@ -855,8 +898,11 @@ def inspect_overlay_sync(
     if should_use_github_overlay_api(item, resolved_config):
         destinations = []
         for target_base, expected_snapshot in resolve_overlay_snapshots(item, store.github_tree(item.source)).items():
-            diff = compare_snapshots(snapshot_tree_git_blob_oids(target_base), expected_snapshot)
-            dirty = git_subtree_dirty(target_base)
+            diff = apply_local_overrides(
+                compare_snapshots(snapshot_tree_git_blob_oids(target_base), expected_snapshot),
+                item.local_overrides,
+            )
+            dirty = git_subtree_dirty(target_base, item.local_overrides)
             destinations.append(
                 {
                     "target_base": str(target_base),
@@ -894,8 +940,8 @@ def inspect_overlay_sync(
         stages = build_overlay_stages(item, checkout_root, stage_root)
         destinations = []
         for target_base, target_stage_root in stages.items():
-            diff = compare_trees(target_base, target_stage_root)
-            dirty = git_subtree_dirty(target_base)
+            diff = apply_local_overrides(compare_trees(target_base, target_stage_root), item.local_overrides)
+            dirty = git_subtree_dirty(target_base, item.local_overrides)
             destinations.append(
                 {
                     "target_base": str(target_base),
@@ -966,6 +1012,7 @@ def upgrade_overlay_sync(
                 target_base,
                 expected_snapshot,
                 lambda oid: store.github_blob(item.source, oid),
+                item.local_overrides,
             )
         result = inspect_overlay_sync(item, store, resolved_config)
         result["changed"] = True
@@ -976,7 +1023,7 @@ def upgrade_overlay_sync(
         stage_root = Path(temp_dir) / "stage"
         stages = build_overlay_stages(item, checkout_root, stage_root)
         for target_base, target_stage_root in stages.items():
-            sync_tree_exact(target_stage_root, target_base)
+            sync_tree_exact(target_stage_root, target_base, item.local_overrides)
 
     result = inspect_overlay_sync(item, store, resolved_config)
     result["changed"] = True
