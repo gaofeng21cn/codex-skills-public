@@ -145,6 +145,22 @@ def test_load_manifest_supports_mapping_specific_target_bases(tmp_path: Path, mo
     assert items[0].mappings[1].target_base == home_dir / ".skills-manager" / "repos" / "sample-skill" / "src" / "sample-skill"
 
 
+def test_ui_ux_pro_max_updates_the_publishable_library_snapshot() -> None:
+    items = skill_upgrader.load_manifest(skill_upgrader.DEFAULT_MANIFEST)
+    item = next(item for item in items if item.name == "ui-ux-pro-max")
+
+    expected_root = (
+        Path("~/.skills-manager/skills/ui-ux-pro-max").expanduser().resolve(strict=False)
+    )
+    assert item.target_path == expected_root
+    assert item.local_overrides == ("SKILL.md",)
+    assert {mapping.target for mapping in item.mappings} == {"data", "scripts", "templates"}
+    assert all(
+        skill_upgrader.mapping_target_base(item, mapping) == expected_root
+        for mapping in item.mappings
+    )
+
+
 def test_build_overlay_stage_combines_file_and_dir_contents(tmp_path: Path) -> None:
     checkout_root = tmp_path / "checkout"
     (checkout_root / "skill" / "nested").mkdir(parents=True)

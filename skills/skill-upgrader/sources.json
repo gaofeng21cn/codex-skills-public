@@ -133,36 +133,29 @@
       "name": "ui-ux-pro-max",
       "kind": "overlay_sync",
       "local_path": "~/.codex/skills/ui-ux-pro-max",
+      "managed_path": "~/.skills-manager/skills/ui-ux-pro-max",
       "source": {
         "repo_url": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill.git",
         "ref": "main"
       },
       "mappings": [
         {
-          "kind": "file",
-          "source": ".claude/skills/ui-ux-pro-max/SKILL.md",
-          "target": "SKILL.md",
-          "target_base": "~/.skills-manager/repos/ui-ux-pro-max-skill/.claude/skills/ui-ux-pro-max"
-        },
-        {
           "kind": "dir_contents",
           "source": "src/ui-ux-pro-max/data",
-          "target": "data",
-          "target_base": "~/.skills-manager/repos/ui-ux-pro-max-skill/src/ui-ux-pro-max"
+          "target": "data"
         },
         {
           "kind": "dir_contents",
           "source": "src/ui-ux-pro-max/scripts",
-          "target": "scripts",
-          "target_base": "~/.skills-manager/repos/ui-ux-pro-max-skill/src/ui-ux-pro-max"
+          "target": "scripts"
         },
         {
           "kind": "dir_contents",
           "source": "src/ui-ux-pro-max/templates",
-          "target": "templates",
-          "target_base": "~/.skills-manager/repos/ui-ux-pro-max-skill/src/ui-ux-pro-max"
+          "target": "templates"
         }
-      ]
+      ],
+      "local_overrides": ["SKILL.md"]
     }
   ]
 }
