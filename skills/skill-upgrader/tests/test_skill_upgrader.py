@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "skill_upgrader.py"
 SPEC = importlib.util.spec_from_file_location("skill_upgrader", SCRIPT_PATH)
@@ -517,6 +519,49 @@ def test_upgrade_overlay_sync_gh_api_targets_managed_and_mapping_specific_paths(
     assert (managed_root / "SKILL.md").read_text(encoding="utf-8").startswith("---\nname: sample")
     assert (source_root / "data" / "catalog.csv").read_text(encoding="utf-8") == "fresh\n"
     assert (projection_root / "SKILL.md").read_text(encoding="utf-8") == "projection\n"
+
+
+def test_upgrade_overlay_sync_gh_api_stages_all_blobs_before_writing(tmp_path: Path) -> None:
+    managed_root = tmp_path / "managed"
+    managed_root.mkdir()
+    (managed_root / "a.txt").write_text("old-a\n", encoding="utf-8")
+    (managed_root / "b.txt").write_text("old-b\n", encoding="utf-8")
+
+    fresh_a = b"fresh-a\n"
+    fresh_b = b"fresh-b\n"
+    sha_a = skill_upgrader.git_blob_oid_bytes(fresh_a)
+    sha_b = skill_upgrader.git_blob_oid_bytes(fresh_b)
+    source = skill_upgrader.SourceRepo(repo_url="https://github.com/example/demo.git", ref="main")
+    item = skill_upgrader.ManagedItem(
+        name="sample",
+        kind="overlay_sync",
+        local_path=managed_root,
+        managed_path=managed_root,
+        source=source,
+        mappings=(skill_upgrader.Mapping(kind="dir_contents", source="skill", target="."),),
+    )
+    store = skill_upgrader.RepoCheckoutStore(tmp_path / "checkouts")
+    store.github_trees[("example/demo", "main")] = {
+        "skill/a.txt": sha_a,
+        "skill/b.txt": sha_b,
+    }
+
+    def fail_on_second_blob(_source, oid: str) -> bytes:
+        if oid == sha_b:
+            raise RuntimeError("simulated blob download failure")
+        return fresh_a
+
+    store.github_blob = fail_on_second_blob
+
+    with pytest.raises(RuntimeError, match="simulated blob download failure"):
+        skill_upgrader.upgrade_overlay_sync(
+            item,
+            store,
+            skill_upgrader.LocalMachineConfig(github_overlay_transport="gh_api"),
+        )
+
+    assert (managed_root / "a.txt").read_text(encoding="utf-8") == "old-a\n"
+    assert (managed_root / "b.txt").read_text(encoding="utf-8") == "old-b\n"
 
 
 def test_inspect_git_repo_detects_repo_behind_upstream(tmp_path: Path) -> None:

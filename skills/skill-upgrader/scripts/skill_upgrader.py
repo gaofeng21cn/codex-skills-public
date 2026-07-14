@@ -1007,13 +1007,19 @@ def upgrade_overlay_sync(
 
     assert item.source is not None
     if should_use_github_overlay_api(item, resolved_config):
-        for target_base, expected_snapshot in resolve_overlay_snapshots(item, store.github_tree(item.source)).items():
-            sync_snapshot_exact(
-                target_base,
-                expected_snapshot,
-                lambda oid: store.github_blob(item.source, oid),
-                item.local_overrides,
-            )
+        snapshots = resolve_overlay_snapshots(item, store.github_tree(item.source))
+        with tempfile.TemporaryDirectory(prefix=f"skill-upgrader-{item.name}-") as temp_dir:
+            staged: dict[Path, Path] = {}
+            for index, (target_base, expected_snapshot) in enumerate(snapshots.items()):
+                stage_root = Path(temp_dir) / str(index)
+                sync_snapshot_exact(
+                    stage_root,
+                    expected_snapshot,
+                    lambda oid: store.github_blob(item.source, oid),
+                )
+                staged[target_base] = stage_root
+            for target_base, stage_root in staged.items():
+                sync_tree_exact(stage_root, target_base, item.local_overrides)
         result = inspect_overlay_sync(item, store, resolved_config)
         result["changed"] = True
         return result
