@@ -14,7 +14,7 @@ This skill manages two related jobs:
 
 It is for deterministic upgrade and sync, not source discovery.
 
-When a visible install path is a symlink or projected skill view, do not upgrade the symlink entrypoint blindly. Use item-level `managed_path` when the whole skill has one real source-of-truth directory, or use mapping-level `target_base` when different parts of the skill belong to different real directories.
+When a visible install path is a symlink or projected skill view, do not upgrade the symlink entrypoint blindly. Use item-level `managed_path` when the whole skill has one real source-of-truth directory, or use mapping-level `target_base` when different parts of the skill belong to different real directories. Use mapping-level `frontmatter_overrides` for narrow local routing fields while keeping the rest of the upstream `SKILL.md` current.
 
 This skill is not the owner for the Codex CLI binary, Codex plugin marketplaces/cache, OPL domain plugin projections, repository dependency locks, or vulnerability remediation. For broad "update everything" requests, use this skill for the managed skill library slice, then verify the other surfaces through their native owner commands such as `codex update`, `codex plugin marketplace upgrade`, `opl system startup-maintenance --json`, repo lockfile installers, and repo health checks.
 
@@ -56,9 +56,9 @@ python3 scripts/skill_upgrader.py bootstrap-manager-db
 Local machine config:
 
 ```bash
-python3 scripts/skill_upgrader.py inspect --local-config local_machine.json
-python3 scripts/skill_upgrader.py upgrade --local-config local_machine.json
-python3 scripts/skill_upgrader.py library-pull --private-config ~/.skills-manager/local_machine.private.json
+python3 scripts/skill_upgrader.py --local-config local_machine.json inspect
+python3 scripts/skill_upgrader.py --local-config local_machine.json upgrade
+python3 scripts/skill_upgrader.py --private-config ~/.skills-manager/local_machine.private.json library-pull
 ```
 
 ## Workflow
@@ -104,6 +104,9 @@ Sensitive settings such as the private library remote must stay in `~/.skills-ma
 - If an overlay target path is dirty inside a git worktree, inspect must report that state and block upgrade instead of overwriting local changes.
 - If a target is dirty, ahead, or diverged, report that state instead of forcing an upgrade.
 - `overlay_sync` targets are exact mirrors of declared upstream mappings. Local drift in those directories is removed on upgrade.
+- Python bytecode caches (`__pycache__`, `*.pyc`, and `*.pyo`) are runtime artifacts and do not affect currentness.
+- A mapped `SKILL.md` must include every relative `references/`, `scripts/`, `templates/`, or `assets/` path it cites; incomplete packages fail before publication.
+- `frontmatter_overrides` may replace only scalar routing metadata on an explicit file mapping. Keep overrides narrow so upstream instructions and resources continue to update.
 - `local_overrides` entries are intentional local files that inspect ignores and upgrade preserves; use them sparingly for prompt-budget or machine-specific installed-skill adaptations.
 - `library-pull` only clones or fast-forwards. It must not auto-merge.
 - `library-push` must fail if the library repo is behind or diverged.

@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -36,6 +37,7 @@ class Mapping:
     source: str
     target: str
     target_base: Path | None = None
+    frontmatter_overrides: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -78,6 +80,7 @@ class RepoCheckoutStore:
     github_commits: dict[tuple[str, str], dict[str, object]] = field(default_factory=dict)
     github_trees: dict[tuple[str, str], dict[str, str]] = field(default_factory=dict)
     github_blobs: dict[tuple[str, str, str], bytes] = field(default_factory=dict)
+    synthetic_blobs: dict[str, bytes] = field(default_factory=dict)
 
     def checkout(self, source: SourceRepo) -> Path:
         key = (source.repo_url, source.ref)
@@ -143,6 +146,10 @@ class RepoCheckoutStore:
         content = base64.b64decode(payload["content"])
         self.github_blobs[key] = content
         return content
+
+    def overlay_blob(self, source: SourceRepo, sha: str) -> bytes:
+        synthetic = self.synthetic_blobs.get(sha)
+        return synthetic if synthetic is not None else self.github_blob(source, sha)
 
 
 def parse_args() -> argparse.Namespace:
@@ -232,17 +239,32 @@ def load_manifest(path: Path) -> list[ManagedItem]:
         if kind == "overlay_sync":
             source_raw = raw["source"]
             source = SourceRepo(repo_url=source_raw["repo_url"], ref=source_raw["ref"])
-            mappings = tuple(
-                Mapping(
-                    kind=mapping["kind"],
-                    source=mapping["source"],
-                    target=mapping["target"],
-                    target_base=Path(mapping["target_base"]).expanduser().resolve(strict=False)
-                    if "target_base" in mapping
-                    else None,
+            parsed_mappings: list[Mapping] = []
+            for mapping in raw["mappings"]:
+                frontmatter_raw = mapping.get("frontmatter_overrides", {})
+                if not isinstance(frontmatter_raw, dict) or not all(
+                    isinstance(key, str) and isinstance(value, str)
+                    for key, value in frontmatter_raw.items()
+                ):
+                    raise ValueError(
+                        f"frontmatter_overrides must be a string mapping for {raw['name']}"
+                    )
+                if frontmatter_raw and mapping["kind"] != "file":
+                    raise ValueError(
+                        f"frontmatter_overrides requires a file mapping for {raw['name']}"
+                    )
+                parsed_mappings.append(
+                    Mapping(
+                        kind=mapping["kind"],
+                        source=mapping["source"],
+                        target=mapping["target"],
+                        target_base=Path(mapping["target_base"]).expanduser().resolve(strict=False)
+                        if "target_base" in mapping
+                        else None,
+                        frontmatter_overrides=tuple(frontmatter_raw.items()),
+                    )
                 )
-                for mapping in raw["mappings"]
-            )
+            mappings = tuple(parsed_mappings)
         items.append(
             ManagedItem(
                 name=raw["name"],
@@ -344,6 +366,20 @@ def git_blob_oid_file(path: Path) -> str:
     return git_blob_oid_bytes(path.read_bytes())
 
 
+def is_runtime_cache_path(rel_path: str) -> bool:
+    path = Path(rel_path)
+    return "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}
+
+
+def is_ignored_overlay_path(rel_path: str, ignored_rel_paths: tuple[str, ...] = ()) -> bool:
+    if is_runtime_cache_path(rel_path):
+        return True
+    return any(
+        rel_path == ignored.rstrip("/") or rel_path.startswith(f"{ignored.rstrip('/')}/")
+        for ignored in ignored_rel_paths
+    )
+
+
 def snapshot_tree(root: Path) -> dict[str, str]:
     if not root.exists():
         return {}
@@ -354,7 +390,10 @@ def snapshot_tree(root: Path) -> dict[str, str]:
         rel = path.relative_to(root)
         if ".git" in rel.parts:
             continue
-        snapshot[rel.as_posix()] = sha256_file(path)
+        rel_posix = rel.as_posix()
+        if is_runtime_cache_path(rel_posix):
+            continue
+        snapshot[rel_posix] = sha256_file(path)
     return snapshot
 
 
@@ -368,7 +407,10 @@ def snapshot_tree_git_blob_oids(root: Path) -> dict[str, str]:
         rel = path.relative_to(root)
         if ".git" in rel.parts:
             continue
-        snapshot[rel.as_posix()] = git_blob_oid_file(path)
+        rel_posix = rel.as_posix()
+        if is_runtime_cache_path(rel_posix):
+            continue
+        snapshot[rel_posix] = git_blob_oid_file(path)
     return snapshot
 
 
@@ -433,17 +475,16 @@ def git_subtree_dirty(path: Path, ignored_rel_paths: tuple[str, ...] = ()) -> bo
 def apply_local_overrides(diff: dict[str, object], overrides: tuple[str, ...]) -> dict[str, object]:
     if not overrides:
         return diff
-    ignored = set(overrides)
-    only_local = [path for path in diff["only_local"] if path not in ignored]
-    only_expected = [path for path in diff["only_expected"] if path not in ignored]
-    changed = [path for path in diff["changed"] if path not in ignored]
+    only_local = [path for path in diff["only_local"] if not is_ignored_overlay_path(path, overrides)]
+    only_expected = [path for path in diff["only_expected"] if not is_ignored_overlay_path(path, overrides)]
+    changed = [path for path in diff["changed"] if not is_ignored_overlay_path(path, overrides)]
     return {
         **diff,
         "match": not only_local and not only_expected and not changed,
         "only_local": only_local,
         "only_expected": only_expected,
         "changed": changed,
-        "local_overrides": sorted(ignored),
+        "local_overrides": sorted(overrides),
     }
 
 
@@ -473,6 +514,94 @@ def copy_dir_contents(src_dir: Path, dest_dir: Path) -> None:
             copy_file(child, dest_child)
 
 
+FRONTMATTER_KEY_PATTERN = re.compile(r"^([A-Za-z0-9_-]+)\s*:")
+SKILL_RESOURCE_PATTERN = re.compile(
+    r"(?<![/A-Za-z0-9_.-])((?:references|scripts|templates|assets)/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)"
+)
+
+
+def yaml_scalar(value: str) -> str:
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", value):
+        return value
+    return json.dumps(value, ensure_ascii=False)
+
+
+def apply_frontmatter_overrides(data: bytes, overrides: tuple[tuple[str, str], ...]) -> bytes:
+    if not overrides:
+        return data
+    text = data.decode("utf-8")
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].rstrip("\r\n") != "---":
+        raise ValueError("frontmatter override target is missing the opening delimiter")
+    closing_index = next(
+        (index for index, line in enumerate(lines[1:], start=1) if line.rstrip("\r\n") == "---"),
+        None,
+    )
+    if closing_index is None:
+        raise ValueError("frontmatter override target is missing the closing delimiter")
+
+    newline = "\r\n" if lines[0].endswith("\r\n") else "\n"
+    override_map = dict(overrides)
+    seen: set[str] = set()
+    output = [lines[0]]
+    index = 1
+    while index < closing_index:
+        match = FRONTMATTER_KEY_PATTERN.match(lines[index])
+        key = match.group(1) if match else None
+        if key not in override_map:
+            output.append(lines[index])
+            index += 1
+            continue
+
+        output.append(f"{key}: {yaml_scalar(override_map[key])}{newline}")
+        seen.add(key)
+        index += 1
+        while index < closing_index and not FRONTMATTER_KEY_PATTERN.match(lines[index]):
+            index += 1
+
+    for key, value in overrides:
+        if key not in seen:
+            output.append(f"{key}: {yaml_scalar(value)}{newline}")
+    output.extend(lines[closing_index:])
+    return "".join(output).encode("utf-8")
+
+
+def extract_skill_resource_paths(data: bytes) -> set[str]:
+    text = data.decode("utf-8")
+    return {match.group(1).rstrip(".,;:)") for match in SKILL_RESOURCE_PATTERN.finditer(text)}
+
+
+def validate_skill_snapshot(
+    item: ManagedItem,
+    target_base: Path,
+    snapshot: dict[str, str],
+    content_loader: Callable[[str], bytes],
+) -> None:
+    skill_oid = snapshot.get("SKILL.md")
+    if skill_oid is None:
+        return
+    missing = sorted(extract_skill_resource_paths(content_loader(skill_oid)) - snapshot.keys())
+    if missing:
+        raise FileNotFoundError(
+            f"incomplete skill package for {item.name} at {target_base}: missing {', '.join(missing)}"
+        )
+
+
+def validate_skill_stage(item: ManagedItem, target_base: Path, stage_root: Path) -> None:
+    skill_path = stage_root / "SKILL.md"
+    if not skill_path.is_file():
+        return
+    missing = sorted(
+        rel_path
+        for rel_path in extract_skill_resource_paths(skill_path.read_bytes())
+        if not (stage_root / rel_path).is_file()
+    )
+    if missing:
+        raise FileNotFoundError(
+            f"incomplete skill package for {item.name} at {target_base}: missing {', '.join(missing)}"
+        )
+
+
 def build_overlay_stage(item: ManagedItem, checkout_root: Path, stage_root: Path) -> None:
     build_overlay_stage_for_mappings(item, item.mappings, checkout_root, stage_root)
 
@@ -491,6 +620,10 @@ def build_overlay_stage_for_mappings(
             if not source_path.is_file():
                 raise FileNotFoundError(f"missing source file for {item.name}: {source_path}")
             copy_file(source_path, target_path)
+            if mapping.frontmatter_overrides:
+                target_path.write_bytes(
+                    apply_frontmatter_overrides(target_path.read_bytes(), mapping.frontmatter_overrides)
+                )
             continue
         if mapping.kind == "dir_contents":
             if not source_path.is_dir():
@@ -513,6 +646,7 @@ def build_overlay_stages(item: ManagedItem, checkout_root: Path, stage_root: Pat
     for index, (target_base, mappings) in enumerate(grouped_mappings.items()):
         target_stage_root = stage_root / str(index)
         build_overlay_stage_for_mappings(item, mappings, checkout_root, target_stage_root)
+        validate_skill_stage(item, target_base, target_stage_root)
         stages[target_base] = target_stage_root
     return stages
 
@@ -536,20 +670,25 @@ def prune_empty_dirs(root: Path) -> None:
 
 def sync_tree_exact(stage_root: Path, local_root: Path, ignored_rel_paths: tuple[str, ...] = ()) -> None:
     local_root.mkdir(parents=True, exist_ok=True)
-    ignored = set(ignored_rel_paths)
 
-    expected_entries = {path.relative_to(stage_root).as_posix() for path in stage_root.rglob("*")}
-    local_entries = {path.relative_to(local_root).as_posix() for path in local_root.rglob("*")}
+    expected_entries = {
+        path.relative_to(stage_root).as_posix()
+        for path in stage_root.rglob("*")
+        if not is_ignored_overlay_path(path.relative_to(stage_root).as_posix(), ignored_rel_paths)
+    }
+    local_entries = {
+        path.relative_to(local_root).as_posix()
+        for path in local_root.rglob("*")
+        if not is_ignored_overlay_path(path.relative_to(local_root).as_posix(), ignored_rel_paths)
+    }
 
     for rel in sorted(local_entries - expected_entries, reverse=True):
-        if rel in ignored:
-            continue
         remove_path(local_root / rel)
 
     for path in sorted(stage_root.rglob("*")):
         rel = path.relative_to(stage_root)
         rel_posix = rel.as_posix()
-        if rel_posix in ignored:
+        if is_ignored_overlay_path(rel_posix, ignored_rel_paths):
             continue
         target = local_root / rel
         if path.is_dir():
@@ -566,18 +705,18 @@ def sync_snapshot_exact(
 ) -> None:
     local_root.mkdir(parents=True, exist_ok=True)
     local_snapshot = snapshot_tree_git_blob_oids(local_root)
-    ignored = set(ignored_rel_paths)
+    filtered_expected = {
+        rel: oid
+        for rel, oid in expected_snapshot.items()
+        if not is_ignored_overlay_path(rel, ignored_rel_paths)
+    }
 
-    for rel in sorted(local_snapshot.keys() - expected_snapshot.keys(), reverse=True):
-        if rel in ignored:
-            continue
+    for rel in sorted(local_snapshot.keys() - filtered_expected.keys(), reverse=True):
         remove_path(local_root / rel)
 
-    for rel in sorted(expected_snapshot.keys()):
-        if rel in ignored:
-            continue
+    for rel in sorted(filtered_expected.keys()):
         target = local_root / rel
-        expected_oid = expected_snapshot[rel]
+        expected_oid = filtered_expected[rel]
         current_oid = local_snapshot.get(rel)
         if current_oid == expected_oid:
             continue
@@ -813,18 +952,43 @@ def resolve_overlay_snapshot(
                     continue
                 rel = path[len(prefix):]
             target = rel if not target_root else f"{target_root}/{rel}"
-            expected[target] = oid
+            if not is_runtime_cache_path(target):
+                expected[target] = oid
     return expected
 
 
-def resolve_overlay_snapshots(item: ManagedItem, blob_paths: dict[str, str]) -> dict[Path, dict[str, str]]:
+def resolve_overlay_snapshots(
+    item: ManagedItem,
+    blob_paths: dict[str, str],
+    store: RepoCheckoutStore,
+) -> dict[Path, dict[str, str]]:
     grouped_mappings: dict[Path, list[Mapping]] = {}
     for mapping in item.mappings:
         grouped_mappings.setdefault(mapping_target_base(item, mapping), []).append(mapping)
-    return {
+    snapshots = {
         target_base: resolve_overlay_snapshot(mappings, blob_paths)
         for target_base, mappings in grouped_mappings.items()
     }
+    assert item.source is not None
+    for mapping in item.mappings:
+        if not mapping.frontmatter_overrides:
+            continue
+        source_oid = blob_paths[mapping.source]
+        transformed = apply_frontmatter_overrides(
+            store.github_blob(item.source, source_oid),
+            mapping.frontmatter_overrides,
+        )
+        synthetic_oid = git_blob_oid_bytes(transformed)
+        store.synthetic_blobs[synthetic_oid] = transformed
+        snapshots[mapping_target_base(item, mapping)][mapping.target] = synthetic_oid
+    for target_base, snapshot in snapshots.items():
+        validate_skill_snapshot(
+            item,
+            target_base,
+            snapshot,
+            lambda oid: store.overlay_blob(item.source, oid),
+        )
+    return snapshots
 
 
 def should_use_github_overlay_api(item: ManagedItem, config: LocalMachineConfig) -> bool:
@@ -897,7 +1061,11 @@ def inspect_overlay_sync(
     assert item.source is not None
     if should_use_github_overlay_api(item, resolved_config):
         destinations = []
-        for target_base, expected_snapshot in resolve_overlay_snapshots(item, store.github_tree(item.source)).items():
+        for target_base, expected_snapshot in resolve_overlay_snapshots(
+            item,
+            store.github_tree(item.source),
+            store,
+        ).items():
             diff = apply_local_overrides(
                 compare_snapshots(snapshot_tree_git_blob_oids(target_base), expected_snapshot),
                 item.local_overrides,
@@ -1007,7 +1175,7 @@ def upgrade_overlay_sync(
 
     assert item.source is not None
     if should_use_github_overlay_api(item, resolved_config):
-        snapshots = resolve_overlay_snapshots(item, store.github_tree(item.source))
+        snapshots = resolve_overlay_snapshots(item, store.github_tree(item.source), store)
         with tempfile.TemporaryDirectory(prefix=f"skill-upgrader-{item.name}-") as temp_dir:
             staged: dict[Path, Path] = {}
             for index, (target_base, expected_snapshot) in enumerate(snapshots.items()):
@@ -1015,7 +1183,7 @@ def upgrade_overlay_sync(
                 sync_snapshot_exact(
                     stage_root,
                     expected_snapshot,
-                    lambda oid: store.github_blob(item.source, oid),
+                    lambda oid: store.overlay_blob(item.source, oid),
                 )
                 staged[target_base] = stage_root
             for target_base, stage_root in staged.items():

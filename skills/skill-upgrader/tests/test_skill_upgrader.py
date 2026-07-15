@@ -155,12 +155,67 @@ def test_ui_ux_pro_max_updates_the_publishable_library_snapshot() -> None:
         Path("~/.skills-manager/skills/ui-ux-pro-max").expanduser().resolve(strict=False)
     )
     assert item.target_path == expected_root
-    assert item.local_overrides == ("SKILL.md",)
-    assert {mapping.target for mapping in item.mappings} == {"data", "scripts", "templates"}
+    assert item.local_overrides == ()
+    assert {mapping.target for mapping in item.mappings} == {
+        "SKILL.md",
+        "references",
+        "data",
+        "scripts",
+        "templates",
+    }
     assert all(
         skill_upgrader.mapping_target_base(item, mapping) == expected_root
         for mapping in item.mappings
     )
+    skill_mapping = next(mapping for mapping in item.mappings if mapping.target == "SKILL.md")
+    assert dict(skill_mapping.frontmatter_overrides)["description"].startswith("Use only when")
+
+
+def test_managed_browser_mineru_and_officecli_routes_are_narrow_and_publishable() -> None:
+    items = {item.name: item for item in skill_upgrader.load_manifest(skill_upgrader.DEFAULT_MANIFEST)}
+
+    for item_name in ("agent-browser", "mineru-document-extractor"):
+        skill_mapping = next(
+            mapping for mapping in items[item_name].mappings if mapping.target == "SKILL.md"
+        )
+        assert dict(skill_mapping.frontmatter_overrides)["description"].startswith("Use when")
+        assert items[item_name].local_overrides == ()
+
+    officecli = items["officecli"]
+    assert officecli.target_path == Path("~/.skills-manager/skills/officecli").expanduser().resolve(strict=False)
+    assert officecli.local_overrides == ()
+    assert all(
+        dict(mapping.frontmatter_overrides)["description"].startswith("Use when")
+        for mapping in officecli.mappings
+    )
+
+
+def test_apply_frontmatter_overrides_replaces_folded_field_without_touching_body() -> None:
+    source = b"""---
+name: Upstream Name
+description: >
+  Broad upstream trigger.
+  More trigger text.
+metadata: {\"source\":\"upstream\"}
+---
+
+# Body
+Keep this body current.
+"""
+
+    transformed = skill_upgrader.apply_frontmatter_overrides(
+        source,
+        (
+            ("name", "sample-skill"),
+            ("description", "Use when explicitly requested."),
+        ),
+    ).decode("utf-8")
+
+    assert "name: sample-skill" in transformed
+    assert 'description: "Use when explicitly requested."' in transformed
+    assert "Broad upstream trigger" not in transformed
+    assert 'metadata: {"source":"upstream"}' in transformed
+    assert transformed.endswith("# Body\nKeep this body current.\n")
 
 
 def test_build_overlay_stage_combines_file_and_dir_contents(tmp_path: Path) -> None:
@@ -204,6 +259,23 @@ def test_sync_tree_exact_removes_extraneous_entries(tmp_path: Path) -> None:
     assert not (local_root / "obsolete.txt").exists()
     assert (local_root / "nested" / "keep.txt").read_text(encoding="utf-8") == "fresh\n"
     assert (local_root / "SKILL.md").read_text(encoding="utf-8") == "current\n"
+
+
+def test_overlay_comparison_ignores_python_runtime_caches(tmp_path: Path) -> None:
+    expected_root = tmp_path / "expected"
+    local_root = tmp_path / "local"
+    for root in (expected_root, local_root):
+        (root / "scripts").mkdir(parents=True)
+        (root / "scripts" / "search.py").write_text("print('ok')\n", encoding="utf-8")
+        (root / "SKILL.md").write_text("current\n", encoding="utf-8")
+    cache_dir = local_root / "scripts" / "__pycache__"
+    cache_dir.mkdir()
+    (cache_dir / "search.cpython-313.pyc").write_bytes(b"runtime cache")
+
+    assert skill_upgrader.compare_trees(local_root, expected_root)["match"] is True
+
+    skill_upgrader.sync_tree_exact(expected_root, local_root)
+    assert (cache_dir / "search.cpython-313.pyc").is_file()
 
 
 def test_load_local_machine_config_reads_github_overrides(tmp_path: Path) -> None:
@@ -291,6 +363,26 @@ def test_resolve_overlay_snapshot_maps_file_and_dir_contents_targets() -> None:
         "templates/start.sh": "sha-template",
         "SKILL.md": "sha-skill",
     }
+
+
+def test_build_overlay_stages_rejects_missing_skill_resource(tmp_path: Path) -> None:
+    checkout_root = tmp_path / "checkout"
+    skill_root = checkout_root / "skill"
+    skill_root.mkdir(parents=True)
+    (skill_root / "SKILL.md").write_text(
+        "---\nname: sample\ndescription: Use when testing.\n---\n\nRead `references/guide.md`.\n",
+        encoding="utf-8",
+    )
+    item = skill_upgrader.ManagedItem(
+        name="sample",
+        kind="overlay_sync",
+        local_path=tmp_path / "managed",
+        source=skill_upgrader.SourceRepo(repo_url="https://example.invalid/repo.git", ref="main"),
+        mappings=(skill_upgrader.Mapping(kind="dir_contents", source="skill", target="."),),
+    )
+
+    with pytest.raises(FileNotFoundError, match="missing references/guide.md"):
+        skill_upgrader.build_overlay_stages(item, checkout_root, tmp_path / "stage")
 
 
 def test_sync_snapshot_exact_updates_changed_files_and_removes_extra_entries(tmp_path: Path) -> None:
@@ -488,7 +580,12 @@ def test_upgrade_overlay_sync_gh_api_targets_managed_and_mapping_specific_paths(
         managed_path=managed_root,
         source=source,
         mappings=(
-            skill_upgrader.Mapping(kind="file", source="docs/SKILL.md", target="SKILL.md"),
+            skill_upgrader.Mapping(
+                kind="file",
+                source="docs/SKILL.md",
+                target="SKILL.md",
+                frontmatter_overrides=(("description", "Use when explicitly requested."),),
+            ),
             skill_upgrader.Mapping(
                 kind="dir_contents",
                 source="src/sample-skill/data",
@@ -516,7 +613,9 @@ def test_upgrade_overlay_sync_gh_api_targets_managed_and_mapping_specific_paths(
     assert result["local_state"] == "current"
     assert result["action"] == "none"
     assert result["changed"] is True
-    assert (managed_root / "SKILL.md").read_text(encoding="utf-8").startswith("---\nname: sample")
+    managed_skill = (managed_root / "SKILL.md").read_text(encoding="utf-8")
+    assert managed_skill.startswith("---\nname: sample")
+    assert 'description: "Use when explicitly requested."' in managed_skill
     assert (source_root / "data" / "catalog.csv").read_text(encoding="utf-8") == "fresh\n"
     assert (projection_root / "SKILL.md").read_text(encoding="utf-8") == "projection\n"
 
