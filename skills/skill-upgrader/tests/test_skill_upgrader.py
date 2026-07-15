@@ -181,6 +181,12 @@ def test_managed_browser_mineru_and_officecli_routes_are_narrow_and_publishable(
         assert dict(skill_mapping.frontmatter_overrides)["description"].startswith("Use when")
         assert items[item_name].local_overrides == ()
 
+    agent_overrides = dict(next(
+        mapping for mapping in items["agent-browser"].mappings if mapping.target == "SKILL.md"
+    ).frontmatter_overrides)
+    assert "hidden" in agent_overrides
+    assert agent_overrides["hidden"] is None
+
     officecli = items["officecli"]
     assert officecli.target_path == Path("~/.skills-manager/skills/officecli").expanduser().resolve(strict=False)
     assert officecli.local_overrides == ()
@@ -197,6 +203,7 @@ description: >
   Broad upstream trigger.
   More trigger text.
 metadata: {\"source\":\"upstream\"}
+hidden: true
 ---
 
 # Body
@@ -208,6 +215,7 @@ Keep this body current.
         (
             ("name", "sample-skill"),
             ("description", "Use when explicitly requested."),
+            ("hidden", None),
         ),
     ).decode("utf-8")
 
@@ -215,6 +223,7 @@ Keep this body current.
     assert 'description: "Use when explicitly requested."' in transformed
     assert "Broad upstream trigger" not in transformed
     assert 'metadata: {"source":"upstream"}' in transformed
+    assert "hidden:" not in transformed
     assert transformed.endswith("# Body\nKeep this body current.\n")
 
 

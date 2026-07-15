@@ -20,7 +20,8 @@
           "source": "skills/agent-browser/SKILL.md",
           "target": "SKILL.md",
           "frontmatter_overrides": {
-            "description": "Use when the user explicitly asks for agent-browser or its CLI, needs browser automation from the terminal, needs Electron app automation or a remote/cloud browser, or the built-in Browser, Chrome, and Computer Use tools are unavailable or unsuitable. Do not prefer agent-browser over available first-party browser tools for routine web interaction."
+            "description": "Use when the user explicitly asks for agent-browser or its CLI, needs browser automation from the terminal, needs Electron app automation or a remote/cloud browser, or the built-in Browser, Chrome, and Computer Use tools are unavailable or unsuitable. Do not prefer agent-browser over available first-party browser tools for routine web interaction.",
+            "hidden": null
           }
         }
       ]

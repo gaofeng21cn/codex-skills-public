@@ -106,7 +106,7 @@ Sensitive settings such as the private library remote must stay in `~/.skills-ma
 - `overlay_sync` targets are exact mirrors of declared upstream mappings. Local drift in those directories is removed on upgrade.
 - Python bytecode caches (`__pycache__`, `*.pyc`, and `*.pyo`) are runtime artifacts and do not affect currentness.
 - A mapped `SKILL.md` must include every relative `references/`, `scripts/`, `templates/`, or `assets/` path it cites; incomplete packages fail before publication.
-- `frontmatter_overrides` may replace only scalar routing metadata on an explicit file mapping. Keep overrides narrow so upstream instructions and resources continue to update.
+- `frontmatter_overrides` may replace scalar routing metadata on an explicit file mapping; a `null` value removes an incompatible upstream field. Keep overrides narrow so upstream instructions and resources continue to update.
 - `local_overrides` entries are intentional local files that inspect ignores and upgrade preserves; use them sparingly for prompt-budget or machine-specific installed-skill adaptations.
 - `library-pull` only clones or fast-forwards. It must not auto-merge.
 - `library-push` must fail if the library repo is behind or diverged.

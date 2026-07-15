@@ -37,7 +37,7 @@ class Mapping:
     source: str
     target: str
     target_base: Path | None = None
-    frontmatter_overrides: tuple[tuple[str, str], ...] = ()
+    frontmatter_overrides: tuple[tuple[str, str | None], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -243,11 +243,11 @@ def load_manifest(path: Path) -> list[ManagedItem]:
             for mapping in raw["mappings"]:
                 frontmatter_raw = mapping.get("frontmatter_overrides", {})
                 if not isinstance(frontmatter_raw, dict) or not all(
-                    isinstance(key, str) and isinstance(value, str)
+                    isinstance(key, str) and (isinstance(value, str) or value is None)
                     for key, value in frontmatter_raw.items()
                 ):
                     raise ValueError(
-                        f"frontmatter_overrides must be a string mapping for {raw['name']}"
+                        f"frontmatter_overrides must be a string-or-null mapping for {raw['name']}"
                     )
                 if frontmatter_raw and mapping["kind"] != "file":
                     raise ValueError(
@@ -526,7 +526,7 @@ def yaml_scalar(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def apply_frontmatter_overrides(data: bytes, overrides: tuple[tuple[str, str], ...]) -> bytes:
+def apply_frontmatter_overrides(data: bytes, overrides: tuple[tuple[str, str | None], ...]) -> bytes:
     if not overrides:
         return data
     text = data.decode("utf-8")
@@ -553,14 +553,16 @@ def apply_frontmatter_overrides(data: bytes, overrides: tuple[tuple[str, str], .
             index += 1
             continue
 
-        output.append(f"{key}: {yaml_scalar(override_map[key])}{newline}")
+        value = override_map[key]
+        if value is not None:
+            output.append(f"{key}: {yaml_scalar(value)}{newline}")
         seen.add(key)
         index += 1
         while index < closing_index and not FRONTMATTER_KEY_PATTERN.match(lines[index]):
             index += 1
 
     for key, value in overrides:
-        if key not in seen:
+        if key not in seen and value is not None:
             output.append(f"{key}: {yaml_scalar(value)}{newline}")
     output.extend(lines[closing_index:])
     return "".join(output).encode("utf-8")
