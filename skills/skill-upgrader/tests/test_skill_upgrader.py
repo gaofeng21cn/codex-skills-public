@@ -335,6 +335,7 @@ def test_load_local_machine_config_reads_private_skills_manager_settings(tmp_pat
                     "library_remote": "git@github.com:example/private-library.git",
                     "library_branch": "stable",
                     "library_dir": "~/custom/skills",
+                    "runtime_dir": "~/.skills-manager/skills",
                     "bootstrap_base_dir": "~/custom",
                     "bootstrap_script": "~/custom/skills/maintenance/bootstrap.py",
                 }
@@ -350,8 +351,34 @@ def test_load_local_machine_config_reads_private_skills_manager_settings(tmp_pat
     assert config.library_remote == "git@github.com:example/private-library.git"
     assert config.library_branch == "stable"
     assert config.library_dir == home_dir / "custom" / "skills"
+    assert config.runtime_dir == home_dir / ".skills-manager" / "skills"
     assert config.bootstrap_base_dir == home_dir / "custom"
     assert config.bootstrap_script == home_dir / "custom" / "skills" / "maintenance" / "bootstrap.py"
+
+
+def test_separate_library_relocates_only_manifest_owned_runtime_paths(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    library = tmp_path / "deployment"
+    visible = tmp_path / "visible" / "sample"
+    external = tmp_path / "external" / "data"
+    item = skill_upgrader.ManagedItem(
+        name="sample",
+        kind="overlay_sync",
+        local_path=visible,
+        managed_path=runtime / "sample",
+        mappings=(
+            skill_upgrader.Mapping("file", "SKILL.md", "SKILL.md", runtime / "sample"),
+            skill_upgrader.Mapping("dir_contents", "data", "data", external),
+        ),
+    )
+    config = skill_upgrader.LocalMachineConfig(library_dir=library, runtime_dir=runtime)
+
+    relocated = skill_upgrader.relocate_managed_items([item], config)[0]
+
+    assert relocated.local_path == visible
+    assert relocated.managed_path == library / "sample"
+    assert relocated.mappings[0].target_base == library / "sample"
+    assert relocated.mappings[1].target_base == external
 
 
 def test_resolve_overlay_snapshot_maps_file_and_dir_contents_targets() -> None:
@@ -799,6 +826,7 @@ def test_library_pull_clones_repo_and_runs_bootstrap(tmp_path: Path) -> None:
 
     config = skill_upgrader.LocalMachineConfig(
         library_dir=library_dir,
+        runtime_dir=library_dir,
         library_remote=str(remote_bare),
         library_branch="main",
         bootstrap_base_dir=base_dir,
@@ -811,6 +839,19 @@ def test_library_pull_clones_repo_and_runs_bootstrap(tmp_path: Path) -> None:
     assert result["changed"] is True
     assert (library_dir / "README.md").read_text(encoding="utf-8") == "seed\n"
     assert marker_path.read_text(encoding="utf-8") == f"--base-dir {base_dir} --reset"
+
+    marker_path.unlink()
+    separated = skill_upgrader.LocalMachineConfig(
+        library_dir=library_dir,
+        runtime_dir=base_dir / "runtime",
+        library_remote=str(remote_bare),
+        library_branch="main",
+        bootstrap_base_dir=base_dir,
+        bootstrap_script=script_path,
+    )
+    separated_result = skill_upgrader.library_pull(separated)
+    assert separated_result["bootstrap"]["status"] == "skipped_separate_runtime"
+    assert not marker_path.exists()
 
 
 def test_library_push_commits_dirty_library_and_pushes(tmp_path: Path) -> None:

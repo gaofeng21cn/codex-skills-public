@@ -10,7 +10,7 @@ description: Use when inspecting or upgrading managed local Codex skills against
 This skill manages two related jobs:
 
 - refresh a fixed set of managed local skills from explicit upstream sources
-- sync a `Skills Manager` central library repo in `~/.skills-manager/skills` across machines
+- publish a private deployment snapshot that a separate deployment owner can project into Skills Manager
 
 It is for deterministic upgrade and sync, not source discovery.
 
@@ -45,7 +45,7 @@ python3 scripts/skill_upgrader.py upgrade
 python3 scripts/skill_upgrader.py upgrade --only agent-browser --only ui-ux-pro-max
 ```
 
-Sync the `Skills Manager` central library:
+Publish or pull the deployment snapshot:
 
 ```bash
 python3 scripts/skill_upgrader.py library-push
@@ -69,23 +69,24 @@ Create this private config once per machine:
 {
   "skills_manager": {
     "library_remote": "git@github.com:<owner>/<private-library>.git",
-    "library_branch": "main"
+    "library_branch": "main",
+    "library_dir": "~/workspace/<private-library>",
+    "runtime_dir": "~/.skills-manager/skills"
   }
 }
 ```
 
 Save it at `~/.skills-manager/local_machine.private.json`.
 
-Recommended day-to-day usage:
+Recommended update workflow:
 
 1. On the machine that refreshes upstream skills:
    - run `python3 scripts/skill_upgrader.py upgrade`
    - run `python3 scripts/skill_upgrader.py inspect` again and read back `local_state`, `action`, `dirty`, and `changed`
    - then run `python3 scripts/skill_upgrader.py library-push`
-2. On every other machine:
-   - run `python3 scripts/skill_upgrader.py library-pull`
-3. If `Skills Manager` metadata looks stale on any machine:
-   - run `python3 scripts/skill_upgrader.py bootstrap-manager-db`
+2. Run the fleet deployment owner once. It pulls the published commit, atomically projects it to the Git-free runtime, and rebuilds Skills Manager metadata.
+
+`library-pull` remains available for legacy layouts and for maintaining a deployment checkout. When `library_dir` and `runtime_dir` differ, it deliberately does not project files or rebuild the database; the deployment owner controls that transaction.
 
 On this Mac, `local_machine.json` records the verified GitHub fast path:
 - `git_repo` items fetch via GitHub SSH and fast-forward from `FETCH_HEAD`
@@ -94,12 +95,19 @@ On this Mac, `local_machine.json` records the verified GitHub fast path:
 
 Sensitive settings such as the private library remote must stay in `~/.skills-manager/local_machine.private.json`, not in this public repo.
 
+The recommended ownership split is:
+
+- `library_dir`: clean, publishable Git deployment snapshot
+- `runtime_dir`: generated, Git-free Skills Manager runtime
+- visible Codex/Agents paths: symlink projections owned by the deployment lifecycle
+
 ## Safety Rules
 
 - Managed targets are defined only in `sources.json`.
 - The helper must not infer repository URLs from skill names.
 - Do not add Codex CLI, plugin marketplace, OPL module, npm audit, or repo dependency upgrade logic to this helper unless those surfaces first define explicit source mappings and safety rules comparable to `sources.json`.
-- If a skill is installed through another manager, `managed_path` or mapping-level `target_base` must point to the directory that owns the files, not a symlinked projection.
+- If `library_dir` differs from `runtime_dir`, manifest paths under the runtime root are automatically relocated to the deployment checkout for `inspect` and `upgrade`.
+- If a skill is installed through another manager, `managed_path` or mapping-level `target_base` must identify the logical library path, not a visible symlinked projection.
 - Use mapping-level `target_base` when a single skill spans multiple real directories, such as a projected `SKILL.md` plus separate source-of-truth `data/`, `scripts/`, or `templates/`.
 - If an overlay target path is dirty inside a git worktree, inspect must report that state and block upgrade instead of overwriting local changes.
 - If a target is dirty, ahead, or diverged, report that state instead of forcing an upgrade.
@@ -108,9 +116,9 @@ Sensitive settings such as the private library remote must stay in `~/.skills-ma
 - A mapped `SKILL.md` must include every relative `references/`, `scripts/`, `templates/`, or `assets/` path it cites; incomplete packages fail before publication.
 - `frontmatter_overrides` may replace scalar routing metadata on an explicit file mapping; a `null` value removes an incompatible upstream field. Keep overrides narrow so upstream instructions and resources continue to update.
 - `local_overrides` entries are intentional local files that inspect ignores and upgrade preserves; use them sparingly for prompt-budget or machine-specific installed-skill adaptations.
-- `library-pull` only clones or fast-forwards. It must not auto-merge.
+- `library-pull` only clones or fast-forwards. It must not auto-merge or mutate a separate runtime.
 - `library-push` must fail if the library repo is behind or diverged.
-- `bootstrap-manager-db` rebuilds `skills-manager.db` from the central library and defaults to `--reset`.
+- `bootstrap-manager-db` rebuilds `skills-manager.db` from `runtime_dir` and defaults to `--reset`.
 
 ## Update Run Triage
 

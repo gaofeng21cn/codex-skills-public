@@ -19,7 +19,8 @@ from urllib.parse import urlparse
 DEFAULT_MANIFEST = Path(__file__).resolve().parents[1] / "sources.json"
 DEFAULT_LOCAL_CONFIG = Path(__file__).resolve().parents[1] / "local_machine.json"
 DEFAULT_PRIVATE_CONFIG = Path("~/.skills-manager/local_machine.private.json").expanduser().resolve(strict=False)
-DEFAULT_LIBRARY_DIR = Path("~/.skills-manager/skills").expanduser().resolve(strict=False)
+DEFAULT_RUNTIME_DIR = Path("~/.skills-manager/skills").expanduser().resolve(strict=False)
+DEFAULT_LIBRARY_DIR = DEFAULT_RUNTIME_DIR
 DEFAULT_BOOTSTRAP_BASE_DIR = Path("~/.skills-manager").expanduser().resolve(strict=False)
 DEFAULT_LIBRARY_BRANCH = "main"
 DEFAULT_LIBRARY_COMMIT_MESSAGE = "chore: sync skills library"
@@ -65,11 +66,12 @@ class LocalMachineConfig:
     ssh_connect_timeout_seconds: int = 15
     private_config_path: Path = field(default_factory=lambda: DEFAULT_PRIVATE_CONFIG)
     library_dir: Path = field(default_factory=lambda: DEFAULT_LIBRARY_DIR)
+    runtime_dir: Path = field(default_factory=lambda: DEFAULT_RUNTIME_DIR)
     library_remote: str | None = None
     library_branch: str = DEFAULT_LIBRARY_BRANCH
     bootstrap_base_dir: Path = field(default_factory=lambda: DEFAULT_BOOTSTRAP_BASE_DIR)
     bootstrap_script: Path = field(
-        default_factory=lambda: default_bootstrap_script_path(DEFAULT_LIBRARY_DIR)
+        default_factory=lambda: default_bootstrap_script_path(DEFAULT_RUNTIME_DIR)
     )
 
 
@@ -297,12 +299,13 @@ def load_local_machine_config(path: Path, private_path: Path | None = None) -> L
     private_skills_manager = private_data.get("skills_manager", {})
     merged_skills_manager = {**public_skills_manager, **private_skills_manager}
     library_dir = expand_path(merged_skills_manager.get("library_dir", str(DEFAULT_LIBRARY_DIR)))
+    runtime_dir = expand_path(merged_skills_manager.get("runtime_dir", str(DEFAULT_RUNTIME_DIR)))
     bootstrap_base_dir = expand_path(
         merged_skills_manager.get("bootstrap_base_dir", str(DEFAULT_BOOTSTRAP_BASE_DIR))
     )
     bootstrap_script_raw = merged_skills_manager.get(
         "bootstrap_script",
-        str(default_bootstrap_script_path(library_dir)),
+        str(default_bootstrap_script_path(runtime_dir)),
     )
     return LocalMachineConfig(
         github_overlay_transport=github.get("overlay_transport", "git_clone"),
@@ -311,6 +314,7 @@ def load_local_machine_config(path: Path, private_path: Path | None = None) -> L
         ssh_connect_timeout_seconds=github.get("ssh_connect_timeout_seconds", 15),
         private_config_path=resolved_private_path,
         library_dir=library_dir,
+        runtime_dir=runtime_dir,
         library_remote=merged_skills_manager.get("library_remote"),
         library_branch=merged_skills_manager.get("library_branch", DEFAULT_LIBRARY_BRANCH),
         bootstrap_base_dir=bootstrap_base_dir,
@@ -329,6 +333,37 @@ def select_items(items: list[ManagedItem], selected: list[str]) -> list[ManagedI
     return chosen
 
 
+def relocate_path(path: Path | None, source_root: Path, target_root: Path) -> Path | None:
+    if path is None or source_root == target_root:
+        return path
+    try:
+        relative = path.resolve(strict=False).relative_to(source_root.resolve(strict=False))
+    except ValueError:
+        return path
+    return (target_root / relative).resolve(strict=False)
+
+
+def relocate_managed_items(items: list[ManagedItem], config: LocalMachineConfig) -> list[ManagedItem]:
+    """Route manifest-owned library paths to the configured deployment checkout."""
+    relocated: list[ManagedItem] = []
+    for item in items:
+        mappings = tuple(
+            replace(
+                mapping,
+                target_base=relocate_path(mapping.target_base, config.runtime_dir, config.library_dir),
+            )
+            for mapping in item.mappings
+        )
+        relocated.append(
+            replace(
+                item,
+                managed_path=relocate_path(item.managed_path, config.runtime_dir, config.library_dir),
+                mappings=mappings,
+            )
+        )
+    return relocated
+
+
 def override_local_machine_config(config: LocalMachineConfig, args: argparse.Namespace) -> LocalMachineConfig:
     updates: dict[str, object] = {}
     library_dir_override = getattr(args, "library_dir", None)
@@ -336,8 +371,6 @@ def override_local_machine_config(config: LocalMachineConfig, args: argparse.Nam
     if library_dir_override:
         new_library_dir = expand_path(library_dir_override)
         updates["library_dir"] = new_library_dir
-        if config.bootstrap_script == default_bootstrap_script_path(config.library_dir) and not bootstrap_script_override:
-            updates["bootstrap_script"] = default_bootstrap_script_path(new_library_dir)
     if getattr(args, "library_remote", None):
         updates["library_remote"] = args.library_remote
     if getattr(args, "library_branch", None):
@@ -878,8 +911,14 @@ def library_pull(config: LocalMachineConfig, skip_bootstrap: bool = False) -> di
             result = inspected
             result["changed"] = False
 
-    if not skip_bootstrap:
+    if not skip_bootstrap and config.library_dir == config.runtime_dir:
         result["bootstrap"] = bootstrap_manager_db(config, reset=True)
+    elif not skip_bootstrap:
+        result["bootstrap"] = {
+            "status": "skipped_separate_runtime",
+            "runtime_dir": str(config.runtime_dir),
+            "note": "The deployment owner must project the published snapshot before rebuilding runtime metadata.",
+        }
     return result
 
 
@@ -1253,7 +1292,10 @@ def main() -> int:
     config = override_local_machine_config(config, args)
 
     if args.command in {"inspect", "upgrade"}:
-        items = select_items(load_manifest(manifest_path), args.only)
+        items = select_items(
+            relocate_managed_items(load_manifest(manifest_path), config),
+            args.only,
+        )
     else:
         items = []
 
