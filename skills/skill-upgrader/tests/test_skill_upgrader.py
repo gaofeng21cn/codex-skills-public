@@ -196,22 +196,14 @@ def test_managed_browser_mineru_and_officecli_routes_are_narrow_and_publishable(
     )
 
 
-def test_additional_official_skill_overlays_are_direct_and_narrow() -> None:
+def test_openai_curated_skills_are_not_managed_overlays() -> None:
     items = {item.name: item for item in skill_upgrader.load_manifest(skill_upgrader.DEFAULT_MANIFEST)}
 
-    expected_openai_paths = {
-        "cli-creator": "skills/.curated/cli-creator",
-        "hatch-pet": "skills/.curated/hatch-pet",
-        "playwright": "skills/.curated/playwright",
-        "screenshot": "skills/.curated/screenshot",
-    }
-    for name, source in expected_openai_paths.items():
-        item = items[name]
-        assert item.source is not None
-        assert item.source.repo_url == "https://github.com/openai/skills.git"
-        assert len(item.mappings) == 1
-        assert item.mappings[0].kind == "dir_contents"
-        assert item.mappings[0].source == source
+    assert {"cli-creator", "hatch-pet", "pdf", "playwright", "screenshot"}.isdisjoint(items)
+
+
+def test_additional_third_party_skill_overlays_are_direct_and_narrow() -> None:
+    items = {item.name: item for item in skill_upgrader.load_manifest(skill_upgrader.DEFAULT_MANIFEST)}
 
     agent_reach = items["agent-reach"]
     assert agent_reach.source is not None
