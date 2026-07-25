@@ -9,7 +9,7 @@ This repository is one of three deliberately separate layers:
 
 - `codex-skills-public`: public, reusable skill development source
 - `codex-skills-private`: private or machine-specific skill development source
-- `ai-skills-library`: private, generated deployment snapshot for the machine fleet
+- `ai-skills-library`: machine-readable owner and installation reference
 
 The paired `public` / `private` names are intentional. They state the access and
 reuse boundary directly; changing them to broader names such as
@@ -17,9 +17,8 @@ reuse boundary directly; changing them to broader names such as
 without changing the architecture.
 
 Upstream-owned skills such as Ponytail, OpenAI curated skills, and Agent Reach
-are not copied here as development source. Their projections are declared in
-[`skills/skill-upgrader/sources.json`](skills/skill-upgrader/sources.json) and
-refreshed from their official repositories.
+are not copied or rewritten here. Install and update them directly through
+their owner-supported channels.
 
 ## Skills
 
@@ -29,7 +28,6 @@ refreshed from their official repositories.
 | Architecture and reliability lenses | `book-aposd`, `book-clean-architecture`, `book-ddia`, `book-domain-driven-design`, `book-legacy-code`, `book-release-it`, `grill-with-docs`, `improve-codebase-architecture`, `prototype`, `zoom-out` |
 | Artifact and learning workflows | `academic-defense-prep`, `evidence-bound-closeout`, `external-learning-landing`, `xiaohongshu-repo-scout` |
 | Local application adapters | `apple-apps`, `mail-triage` |
-| Maintenance | `skill-upgrader` |
 
 Some skills adapt MIT-licensed upstream work. See
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
@@ -44,17 +42,17 @@ python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github
   --path skills/<skill-name>
 ```
 
-For the managed multi-machine environment, use `skill-upgrader` and
-`codex-machine-sync`; do not install from the deployment snapshot by hand.
-Private repository URLs and machine configuration belong in local untracked
-configuration, never in this repository.
+For the multi-machine environment, consult the `ai-skills-library` reference
+catalog and install from the named owner. `codex-machine-sync` reports presence
+but does not install, pin, update, copy, or delete skills. Private repository
+URLs and machine configuration belong in local untracked configuration, never
+in this repository.
 
 ## Development
 
 ```bash
 python scripts/validate_skills.py
 pytest skills/apple-apps/tests/test_mail_meta.py -q
-pytest skills/skill-upgrader/tests/test_skill_upgrader.py -q
 ```
 
 Each skill must remain independently installable. Supporting scripts and tests
