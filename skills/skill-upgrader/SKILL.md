@@ -135,6 +135,7 @@ The recommended ownership split is:
 - `agent-browser`
 - `defuddle`
 - `mineru-document-extractor`
-- `pdf`
 - `officecli`
 - `ui-ux-pro-max`
+
+OpenAI curated skills are deliberately excluded. Codex installs and updates them through its bundled `skill-installer`; this skill must not mirror them into Skills Manager or publish them into a private deployment snapshot.
