@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mail Triage"
+  short_description: "通过 Apple Mail 轻量梳理当天新邮件，重任务转交 Mail Bench"
+  default_prompt: "Use $mail-triage to summarize which new emails deserve attention today."

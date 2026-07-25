@@ -549,7 +549,8 @@ def copy_dir_contents(src_dir: Path, dest_dir: Path) -> None:
 
 FRONTMATTER_KEY_PATTERN = re.compile(r"^([A-Za-z0-9_-]+)\s*:")
 SKILL_RESOURCE_PATTERN = re.compile(
-    r"(?<![/A-Za-z0-9_.-])((?:references|scripts|templates|assets)/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)"
+    r"\]\(((?:references|scripts|templates|assets)/"
+    r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)\)"
 )
 
 

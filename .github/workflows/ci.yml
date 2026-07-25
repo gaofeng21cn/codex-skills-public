@@ -14,6 +14,8 @@ jobs:
           python-version: "3.12"
       - name: Validate skill metadata
         run: python scripts/validate_skills.py
+      - name: Test task mode trigger contract
+        run: python -m unittest tests/test_task_mode_gate.py
 
   test-apple-apps:
     runs-on: ubuntu-latest
@@ -26,3 +28,15 @@ jobs:
         run: python -m pip install --upgrade pip pytest
       - name: Run apple-apps unit tests
         run: pytest skills/apple-apps/tests/test_mail_meta.py -q
+
+  test-skill-upgrader:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install pytest
+        run: python -m pip install --upgrade pip pytest
+      - name: Run skill-upgrader unit tests
+        run: pytest skills/skill-upgrader/tests/test_skill_upgrader.py -q

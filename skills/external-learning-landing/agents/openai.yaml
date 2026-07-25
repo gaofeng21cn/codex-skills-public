@@ -1,0 +1,4 @@
+interface:
+  display_name: "External Learning Landing"
+  short_description: "Map external lessons to owner surfaces"
+  default_prompt: "Use $external-learning-landing to classify external patterns and map useful ones to existing local owner surfaces."

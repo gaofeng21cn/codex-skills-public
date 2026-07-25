@@ -27,6 +27,49 @@
       ]
     },
     {
+      "name": "agent-reach",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/agent-reach",
+      "managed_path": "~/.skills-manager/skills/agent-reach",
+      "source": {
+        "repo_url": "https://github.com/Panniantong/Agent-Reach.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": "agent_reach/skill",
+          "target": "."
+        },
+        {
+          "kind": "file",
+          "source": "agent_reach/skill/SKILL.md",
+          "target": "SKILL.md",
+          "frontmatter_overrides": {
+            "name": "agent-reach",
+            "description": "Use when the user explicitly asks for agent-reach, or when research requires its Twitter/X, Reddit, YouTube, GitHub, Bilibili, XiaoHongShu, Xiaoyuzhou, LinkedIn, V2EX, Xueqiu, or RSS adapters. A generic web search or merely receiving a URL does not trigger this skill."
+          }
+        }
+      ]
+    },
+    {
+      "name": "cli-creator",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/cli-creator",
+      "managed_path": "~/.skills-manager/skills/cli-creator",
+      "source": {
+        "repo_url": "https://github.com/openai/skills.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": "skills/.curated/cli-creator",
+          "target": "."
+        }
+      ]
+    },
+    {
       "name": "defuddle",
       "kind": "overlay_sync",
       "local_path": "~/.codex/skills/defuddle",
@@ -39,6 +82,23 @@
         {
           "kind": "dir_contents",
           "source": "skills/defuddle",
+          "target": "."
+        }
+      ]
+    },
+    {
+      "name": "hatch-pet",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/hatch-pet",
+      "managed_path": "~/.skills-manager/skills/hatch-pet",
+      "source": {
+        "repo_url": "https://github.com/openai/skills.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": "skills/.curated/hatch-pet",
           "target": "."
         }
       ]
@@ -65,6 +125,49 @@
           "frontmatter_overrides": {
             "name": "mineru-document-extractor",
             "description": "Use when the user explicitly asks for MinerU, or when OCR, scanned pages, complex tables or formulas, or batch document conversion require MinerU's specialized parser; ordinary PDF, Office, image, or web reading does not trigger this skill."
+          }
+        }
+      ]
+    },
+    {
+      "name": "playwright",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/playwright",
+      "managed_path": "~/.skills-manager/skills/playwright",
+      "source": {
+        "repo_url": "https://github.com/openai/skills.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": "skills/.curated/playwright",
+          "target": "."
+        }
+      ]
+    },
+    {
+      "name": "ponytail-audit",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/ponytail-audit",
+      "managed_path": "~/.skills-manager/skills/ponytail-audit",
+      "source": {
+        "repo_url": "https://github.com/DietrichGebert/ponytail.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": "skills/ponytail-audit",
+          "target": "."
+        },
+        {
+          "kind": "file",
+          "source": "skills/ponytail-audit/SKILL.md",
+          "target": "SKILL.md",
+          "frontmatter_overrides": {
+            "name": "ponytail-audit",
+            "description": "Use when the user explicitly invokes ponytail-audit or asks for a read-only whole-repository audit of over-engineering, bloat, deletions, consolidation, or standard-library/native replacements. Produce findings only; do not mutate during the audit."
           }
         }
       ]
@@ -167,6 +270,23 @@
           "frontmatter_overrides": {
             "description": "Use when the user explicitly asks to use OfficeCLI for a .xlsx or Excel file, or the official Spreadsheets capability is unavailable and OfficeCLI is the selected fallback."
           }
+        }
+      ]
+    },
+    {
+      "name": "screenshot",
+      "kind": "overlay_sync",
+      "local_path": "~/.codex/skills/screenshot",
+      "managed_path": "~/.skills-manager/skills/screenshot",
+      "source": {
+        "repo_url": "https://github.com/openai/skills.git",
+        "ref": "main"
+      },
+      "mappings": [
+        {
+          "kind": "dir_contents",
+          "source": "skills/.curated/screenshot",
+          "target": "."
         }
       ]
     },

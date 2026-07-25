@@ -1,0 +1,4 @@
+interface:
+  display_name: "Evidence-Bound Closeout"
+  short_description: "Bind generated-artifact QA to exact final bytes"
+  default_prompt: "Use $evidence-bound-closeout to fingerprint the final artifact and bind QA to unchanged bytes."

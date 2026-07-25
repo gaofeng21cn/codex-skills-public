@@ -1,96 +1,62 @@
 # codex-skills-public
 
-Public Codex skills maintained as a multi-skill repository.
+Public source repository for reusable Codex skills maintained by
+`gaofeng21cn`.
 
-This repository hosts installable skills that can be pulled directly into a local Codex setup. The focus is practical, reusable workflows rather than generic prompt snippets.
+## Repository Role
 
-## What This Repo Is For
+This repository is one of three deliberately separate layers:
 
-- Publish reusable Codex skills as standalone installable directories
-- Keep skill logic close to supporting scripts and tests
-- Provide a small public catalog that can be installed one skill at a time
+- `codex-skills-public`: public, reusable skill development source
+- `codex-skills-private`: private or machine-specific skill development source
+- `ai-skills-library`: private, generated deployment snapshot for the machine fleet
 
-This repo is useful if you:
+The paired `public` / `private` names are intentional. They state the access and
+reuse boundary directly; changing them to broader names such as
+`codex-skills` or `codex-skills-internal` would make that boundary less obvious
+without changing the architecture.
 
-- use Codex and want installable skills instead of copying prompts by hand
-- want examples of skills that include helper scripts and tests
-- prefer explicit, repository-backed skill distribution
+Upstream-owned skills such as Ponytail, OpenAI curated skills, and Agent Reach
+are not copied here as development source. Their projections are declared in
+[`skills/skill-upgrader/sources.json`](skills/skill-upgrader/sources.json) and
+refreshed from their official repositories.
 
-## Available Skills
+## Skills
 
-| Skill | Purpose | Typical use |
-| --- | --- | --- |
-| `academic-defense-prep` | Turn academic and medical-research materials into defense deliverables | draft timed oral scripts, PPT speaker notes, storyline rewrites, and reviewer-facing questions |
-| `apple-apps` | Apple Mail automation helpers on macOS | inspect inboxes, search messages, read or mutate messages in Mail.app |
-| `skill-upgrader` | Inspect and upgrade managed local skills from explicit upstream sources, then sync a Skills Manager central library across machines | refresh upstream-managed skills on one machine, push them into a central library repo, and pull them on other machines |
+| Group | Skills |
+| --- | --- |
+| Development entry points | `architect-and-simplify`, `develop-and-deliver`, `task-mode-gate` |
+| Architecture and reliability lenses | `book-aposd`, `book-clean-architecture`, `book-ddia`, `book-domain-driven-design`, `book-legacy-code`, `book-release-it`, `grill-with-docs`, `improve-codebase-architecture`, `prototype`, `zoom-out` |
+| Artifact and learning workflows | `academic-defense-prep`, `evidence-bound-closeout`, `external-learning-landing`, `xiaohongshu-repo-scout` |
+| Local application adapters | `apple-apps`, `mail-triage` |
+| Maintenance | `skill-upgrader` |
 
-## External Tools
+Some skills adapt MIT-licensed upstream work. See
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
-Some heavier tools are intentionally maintained in standalone repositories instead of this catalog. Current example:
+## Install
 
-- [`gaofeng21cn/omx-project-installer`](https://github.com/gaofeng21cn/omx-project-installer)
-  - A compatibility-focused OMX project-scope installer that keeps repository-root `AGENTS.md` App-native, writes OMX orchestration into `./.codex/AGENTS.md`, reconciles system-level model/provider config into project scope, and repairs legacy alias issues until upstream OMX releases fully absorb those fixes.
-
-This stays separate because it is more than a single lightweight skill directory: it ships templates, examples, tests, install scripts, and upstream-compatibility logic as one coherent tool.
-
-## Quick Start
-
-Install a skill from this repo with Codex's GitHub installer:
-
-```bash
-python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
-  --repo gaofeng21cn/codex-skills-public \
-  --path skills/academic-defense-prep
-```
+Install one skill with the bundled Codex installer:
 
 ```bash
 python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
   --repo gaofeng21cn/codex-skills-public \
-  --path skills/apple-apps
+  --path skills/<skill-name>
 ```
 
-```bash
-python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
-  --repo gaofeng21cn/codex-skills-public \
-  --path skills/skill-upgrader
-```
-
-After installation, restart Codex or start a new session so the new skill is picked up reliably.
-
-`skill-upgrader` can also drive a `Skills Manager` central library workflow. Keep the private library remote in `~/.skills-manager/local_machine.private.json`, not in this public repository.
-
-## Repository Layout
-
-- `skills/`: installable skill directories, each with its own `SKILL.md`
-- `skills/<name>/scripts/`: helper scripts used by that skill
-- `skills/<name>/tests/`: skill-specific tests
-- `scripts/`: repository-level validation helpers
-- `.github/workflows/`: CI configuration
-- `docs/`: design notes and implementation plans for repo-maintained skills
+For the managed multi-machine environment, use `skill-upgrader` and
+`codex-machine-sync`; do not install from the deployment snapshot by hand.
+Private repository URLs and machine configuration belong in local untracked
+configuration, never in this repository.
 
 ## Development
 
-Validate skill metadata:
-
 ```bash
 python scripts/validate_skills.py
-```
-
-Run tests:
-
-```bash
 pytest skills/apple-apps/tests/test_mail_meta.py -q
 pytest skills/skill-upgrader/tests/test_skill_upgrader.py -q
 ```
 
-## Design Principles
-
-- Each skill should be installable as an independent directory.
-- Supporting automation belongs next to the skill that uses it.
-- Public skills should prefer explicit behavior over hidden heuristics.
-- Tests should cover the non-trivial logic in helper scripts.
-
-## Notes
-
-- This is a public repository, so only skills suitable for open distribution belong here.
-- Private or machine-specific skills can live in a separate private repo and still be symlinked into a local Codex setup.
+Each skill must remain independently installable. Supporting scripts and tests
+belong inside the owning skill. Public source must not contain credentials,
+machine inventories, private remotes, or absolute personal paths.

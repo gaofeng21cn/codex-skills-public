@@ -1,0 +1,4 @@
+interface:
+  display_name: "XiaoHongShu Repo Scout"
+  short_description: "Find GitHub repos from XiaoHongShu signals"
+  default_prompt: "Use $xiaohongshu-repo-scout to turn XiaoHongShu posts into a verified GitHub repo shortlist."

@@ -196,6 +196,39 @@ def test_managed_browser_mineru_and_officecli_routes_are_narrow_and_publishable(
     )
 
 
+def test_additional_official_skill_overlays_are_direct_and_narrow() -> None:
+    items = {item.name: item for item in skill_upgrader.load_manifest(skill_upgrader.DEFAULT_MANIFEST)}
+
+    expected_openai_paths = {
+        "cli-creator": "skills/.curated/cli-creator",
+        "hatch-pet": "skills/.curated/hatch-pet",
+        "playwright": "skills/.curated/playwright",
+        "screenshot": "skills/.curated/screenshot",
+    }
+    for name, source in expected_openai_paths.items():
+        item = items[name]
+        assert item.source is not None
+        assert item.source.repo_url == "https://github.com/openai/skills.git"
+        assert len(item.mappings) == 1
+        assert item.mappings[0].kind == "dir_contents"
+        assert item.mappings[0].source == source
+
+    agent_reach = items["agent-reach"]
+    assert agent_reach.source is not None
+    assert agent_reach.source.repo_url == "https://github.com/Panniantong/Agent-Reach.git"
+    agent_override = dict(agent_reach.mappings[1].frontmatter_overrides)
+    assert agent_override["name"] == "agent-reach"
+    assert agent_override["description"].startswith("Use when")
+
+    ponytail = items["ponytail-audit"]
+    assert ponytail.source is not None
+    assert ponytail.source.repo_url == "https://github.com/DietrichGebert/ponytail.git"
+    assert ponytail.mappings[0].source == "skills/ponytail-audit"
+    ponytail_override = dict(ponytail.mappings[1].frontmatter_overrides)
+    assert ponytail_override["name"] == "ponytail-audit"
+    assert ponytail_override["description"].startswith("Use when")
+
+
 def test_apply_frontmatter_overrides_replaces_folded_field_without_touching_body() -> None:
     source = b"""---
 name: Upstream Name
@@ -406,7 +439,8 @@ def test_build_overlay_stages_rejects_missing_skill_resource(tmp_path: Path) -> 
     skill_root = checkout_root / "skill"
     skill_root.mkdir(parents=True)
     (skill_root / "SKILL.md").write_text(
-        "---\nname: sample\ndescription: Use when testing.\n---\n\nRead `references/guide.md`.\n",
+        "---\nname: sample\ndescription: Use when testing.\n---\n\n"
+        "Read [the guide](references/guide.md).\n",
         encoding="utf-8",
     )
     item = skill_upgrader.ManagedItem(
@@ -419,6 +453,30 @@ def test_build_overlay_stages_rejects_missing_skill_resource(tmp_path: Path) -> 
 
     with pytest.raises(FileNotFoundError, match="missing references/guide.md"):
         skill_upgrader.build_overlay_stages(item, checkout_root, tmp_path / "stage")
+
+
+def test_generated_inline_resource_paths_are_not_treated_as_package_files(
+    tmp_path: Path,
+) -> None:
+    checkout_root = tmp_path / "checkout"
+    skill_root = checkout_root / "skill"
+    skill_root.mkdir(parents=True)
+    (skill_root / "SKILL.md").write_text(
+        "---\nname: sample\ndescription: Use when testing.\n---\n\n"
+        "Create `references/generated-output.png` while running.\n",
+        encoding="utf-8",
+    )
+    item = skill_upgrader.ManagedItem(
+        name="sample",
+        kind="overlay_sync",
+        local_path=tmp_path / "managed",
+        source=skill_upgrader.SourceRepo(repo_url="https://example.invalid/repo.git", ref="main"),
+        mappings=(skill_upgrader.Mapping(kind="dir_contents", source="skill", target="."),),
+    )
+
+    stages = skill_upgrader.build_overlay_stages(item, checkout_root, tmp_path / "stage")
+
+    assert (stages[item.target_path] / "SKILL.md").is_file()
 
 
 def test_sync_snapshot_exact_updates_changed_files_and_removes_extra_entries(tmp_path: Path) -> None:
