@@ -5,11 +5,14 @@ Public source repository for reusable Codex skills maintained by
 
 ## Repository Role
 
-This repository is one of three deliberately separate layers:
+This repository is one of two source layers:
 
 - `codex-skills-public`: public, reusable skill development source
 - `codex-skills-private`: private or machine-specific skill development source
-- `ai-skills-library`: machine-readable owner and installation reference
+
+The private source repository also owns
+`contracts/skill-reference.json`, the machine-readable desired inventory and
+owner installation reference.
 
 The paired `public` / `private` names are intentional. They state the access and
 reuse boundary directly; changing them to broader names such as
@@ -42,11 +45,12 @@ python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github
   --path skills/<skill-name>
 ```
 
-For the multi-machine environment, consult the `ai-skills-library` reference
-catalog and install from the named owner. `codex-machine-sync` reports presence
-but does not install, pin, update, copy, or delete skills. Private repository
-URLs and machine configuration belong in local untracked configuration, never
-in this repository.
+For the multi-machine environment, consult
+`gaofeng21cn/codex-skills-private:contracts/skill-reference.json` and install
+from the named owner. `codex-machine-sync` reports presence but does not install,
+pin, update, copy, or delete skills. Private repository URLs and machine
+configuration belong in local untracked configuration, never in this
+repository.
 
 ## Development
 
