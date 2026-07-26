@@ -61,6 +61,17 @@ result.
   claims.
 - Do not call a plan, test pass, candidate, dry-run, handoff, or queued action
   complete. Verify the actual terminal surface.
-- Absorb authorized Git work through the repository's current mainline process,
-  verify the final main state, and remove only this task's temporary worktree,
-  branch, or generated artifacts.
+- Creating a worktree creates a same-task terminal obligation. Immediately
+  register its ACTIVE owner, objective, exact write set, and next action through
+  the repository's supported ownership surface.
+- Commit and push clean, non-sensitive stage results to a task-owned remote ref,
+  then read back its commit and tree so unfinished work is recoverable.
+- The original owner remains responsible for fetching fresh `main`, replaying
+  the intended change against current SSOT, resolving conflicts, rerunning
+  affected verification, ordinary-pushing the canonical result, and reading
+  back final main/wire bytes. A handoff transfers this duty only when the
+  receiver explicitly accepts ownership.
+- After canonical absorption, remove this task's worktree, local and remote task
+  refs, holders, and temporary artifacts through the supported guarded cleanup
+  path. A callback, candidate, canonical push, or patch-equivalence checkpoint
+  does not by itself end the source owner's cleanup duty.
