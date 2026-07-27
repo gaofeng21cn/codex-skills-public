@@ -27,7 +27,7 @@ their owner-supported channels.
 
 | Group | Skills |
 | --- | --- |
-| Development entry points | `architect-and-simplify`, `develop-and-deliver`, `task-mode-gate` |
+| Development entry points | `architect-and-simplify`, `develop-and-deliver`, `recover-codex-tasks`, `task-mode-gate` |
 | Architecture and reliability lenses | `book-aposd`, `book-clean-architecture`, `book-ddia`, `book-domain-driven-design`, `book-legacy-code`, `book-release-it`, `grill-with-docs`, `improve-codebase-architecture`, `prototype`, `zoom-out` |
 | Artifact and learning workflows | `academic-defense-prep`, `evidence-bound-closeout`, `external-learning-landing`, `xiaohongshu-repo-scout` |
 | Local application adapters | `apple-apps`, `mail-triage` |
