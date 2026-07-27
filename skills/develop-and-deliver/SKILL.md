@@ -36,6 +36,20 @@ remain authoritative.
 If a named route is unavailable, follow the same narrow boundary directly and
 report the missing managed capability; do not stop an otherwise executable task.
 
+## Diagnose Before Repair
+
+- For an ordinary first failure, reproduce it or trace the real call path to the
+  deepest verifiable breakpoint, then fix that cause directly. A symptom, error
+  code, `blocked` label, or missing dependency is evidence, not automatically
+  the root cause.
+- Escalate to a deeper root-cause analysis only after repeated or flaky failure,
+  a cross-component boundary, runtime/currentness drift, or an explicit request
+  for the root cause.
+- In a deeper analysis, distinguish the visible symptom, immediate breakpoint,
+  cross-surface evidence, canonical owner surface, and repair or decision path.
+  Do not impose planner/debugger/executor/verifier role switching or a heavy
+  diagnostic ceremony on ordinary narrow fixes.
+
 ## Make Progress
 
 1. Implement the smallest coherent change that can reach the requested outcome.
