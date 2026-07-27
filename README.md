@@ -14,6 +14,12 @@ The private source repository also owns
 `contracts/skill-reference.json`, the machine-readable desired inventory and
 owner installation reference.
 
+The canonical cross-repository management boundary is the private
+[`codex-management-boundaries.json`](https://github.com/gaofeng21cn/codex-skills-private/blob/main/contracts/codex-management-boundaries.json)
+contract. This repository implements only its `public_skill_source` role.
+Update the contract first when changing repository roles or the public/private
+classification rule.
+
 The paired `public` / `private` names are intentional. They state the access and
 reuse boundary directly; changing them to broader names such as
 `codex-skills` or `codex-skills-internal` would make that boundary less obvious
