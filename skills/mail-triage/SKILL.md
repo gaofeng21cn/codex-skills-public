@@ -36,12 +36,14 @@ state the handoff and restart fact gathering there instead of combining results.
 
 ## Shared Private Policy
 
-Before making personal triage or routing judgments, read the Mail Bench private
-overlay entry point when it exists:
+Before making personal triage or routing judgments, read the OPL Relay private
+workspace entry point when it exists:
 
-1. Use `$CODEX_MAIL_HOME/AGENTS.md` when `CODEX_MAIL_HOME` is set.
-2. Otherwise use `~/.codex-mail-workbench/AGENTS.md`.
-3. Follow the required read order from that entry point.
+1. Use `$OPL_RELAY_WORKSPACE/AGENTS.md` when `OPL_RELAY_WORKSPACE` is set.
+2. Otherwise use `~/.opl-relay/workspaces/default/AGENTS.md` when present.
+3. Fall back to `$CODEX_MAIL_HOME/AGENTS.md` or
+   `~/.codex-mail-workbench/AGENTS.md` only for an unmigrated installation.
+4. Follow the required read order from that entry point.
 
 The overlay supplies policy and personal context only. While this route is
 active, mailbox facts still come exclusively from Apple Mail; do not run
