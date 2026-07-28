@@ -89,7 +89,9 @@ Use when an ephemeral discussion/audit disappeared but a writer survives:
 This is a user-visible continuation of an ephemeral side task lost after a
 Codex restart. Reconstruct from fresh task readback, SQLite/rollout evidence,
 and current authority. The original writer remains <thread-id>; this task is a
-read-only discussion/audit surface and must not become a second writer.
+read-only discussion/audit surface and must not mutate the original shared
+surface. If implementation is still needed, use a separately registered
+worktree with an explicit write set.
 
 Objective: <objective>
 Known evidence: <task IDs, checkpoint, write set>
@@ -105,8 +107,9 @@ Use only after authority transfer is proven:
 ```text
 This task is the fresh successor for <objective>. The predecessor <thread-id>
 is unreadable/unreachable and its write authority is released as of <evidence>.
-You are the unique writer for exact write set <paths>. Start from fresh
-canonical <ref>, reconcile checkpoint <ref/SHA>, and do not repeat any unknown
+You are the writer for the independent worktree and exact write set <paths>.
+The predecessor's shared checkout or external mutation remains untouched. Start
+from fresh canonical <ref>, reconcile checkpoint <ref/SHA>, and do not repeat any unknown
 external mutation. Complete semantic replay, verification, ordinary canonical
 push, wire readback, and task-owned cleanup.
 ```
@@ -119,4 +122,6 @@ After creating or resuming a task, confirm:
 - its latest turn is `inProgress` or it produced a completed first checkpoint;
 - its first commentary reflects the injected objective;
 - it names the correct owner/write boundary;
-- no duplicate worktree, workflow run, VM, or external mutation appeared.
+- no duplicate shared checkout mutation, workflow run, VM, or external mutation
+  appeared. Independent worktrees are valid when each has its own receipt and
+  recovery point.

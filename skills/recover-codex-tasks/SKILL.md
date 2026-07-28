@@ -1,6 +1,6 @@
 ---
 name: recover-codex-tasks
-description: Use when recovering missing, interrupted, hidden, or unreadable Codex tasks and side conversations after an app restart or thread bug; when a user says a Codex task, sidebar conversation, delegated side task, sub-agent, or in-progress turn disappeared; when a known thread ID returns `No Codex thread found`; or when work must be reconstructed from Codex thread tools, `state_5.sqlite`, rollout JSONL, spawn graphs, Git worktrees, and receipts without creating duplicate writers.
+description: Use when recovering missing, interrupted, hidden, or unreadable Codex tasks and side conversations after an app restart or thread bug; when a user says a Codex task, sidebar conversation, delegated side task, sub-agent, or in-progress turn disappeared; when a known thread ID returns `No Codex thread found`; or when work must be reconstructed from Codex thread tools, `state_5.sqlite`, rollout JSONL, spawn graphs, Git worktrees, and receipts without replaying a live shared mutation.
 ---
 
 # Recover Codex Tasks
@@ -17,7 +17,10 @@ the missing task from fresh evidence.
   invent a thread ID.
 - Do not treat a thread title, task branch, checkpoint, test pass, or archived
   rollout as current execution truth.
-- Do not create a second Git, release, deployment, VM, or runtime writer.
+- Do not create a second writer for the same shared checkout, canonical mutation,
+  release, deployment, VM, or runtime operation. An independent Git worktree and
+  branch may continue in parallel, including with an overlapping write set;
+  resolve conflicts at fresh canonical integration.
 - Do not archive an old task merely because a continuation was created.
 - Preserve unrelated dirty worktrees, active processes, credentials, sessions,
   caches, and native app state.
@@ -30,9 +33,10 @@ Start read-only. Record the user's requested objective, known thread IDs,
 project/repository, approximate time, visible title, related owners, and the
 last remembered checkpoint.
 
-If the missing task controlled Git, release, VM, install, or external state,
-identify the current unique writer before sending follow-ups or creating a
-successor.
+If the missing task controlled a shared checkout, release, VM, install, or other
+external state, identify the current operation owner before sending follow-ups
+or creating a successor. A separate worktree implementation does not need to
+wait for an unrelated writer; record the overlap and integrate it later.
 
 ### 2. Probe the App Task Surface
 
@@ -151,6 +155,7 @@ may remain `ACTIVE`.
 - If several candidates are plausible, do not merge their responsibilities.
   Create a continuation from only the common proven scope and list the
   unresolved identity question.
-- If a new task starts as a duplicate writer, immediately stop its write
-  authority and convert it to read-only coordination or transfer ownership
-  explicitly.
+- If a new task starts writing the same shared checkout or external operation,
+  immediately stop that operation and either convert it to read-only
+  coordination or establish an explicit owner transfer. Do not stop an
+  independent worktree merely because its write set overlaps another branch.
