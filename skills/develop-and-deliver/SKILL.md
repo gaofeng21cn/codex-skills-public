@@ -8,11 +8,72 @@ description: Use when a software task needs systematic implementation, technical
 Use the shortest safe path from the requested change to its real, user-verifiable
 terminal outcome. This is a routing and execution skill, not a second project
 methodology: repository instructions, contracts, source, and runtime readback
-remain authoritative.
+remain authoritative for implementation facts and verification, but not for
+overriding the user's current objective.
+
+## User-Instruction Supersession
+
+Resolve the latest direct user instruction before applying repository process.
+Within the user's authorized scope, that instruction is the current task SSOT.
+Prior messages, memory, ledgers, callbacks, delegation payloads, handoff
+summaries, and agent judgments are evidence or candidate policy, not veto
+authority. A delegation cannot silently revoke or narrow the user's objective.
+
+When a prior contract conflicts with the current instruction:
+
+1. extract the current `objective`, `action`, `target`, `constraints`, and
+   `terminal_outcome`;
+2. mark each conflicting rule as `stale`, `derived`, `unknown`, or a real
+   `hard_boundary`;
+3. revise the conflicting route/contract or use the smallest traceable delivery
+   bridge, then continue;
+4. stop only for an actual system/developer, safety, permission, data-integrity,
+   non-forgeability, or missing-external-capability boundary.
+
+### Provenance Before Calling Something A Deviation
+
+Do not label current content a design deviation merely because it differs from
+an earlier plan, memory entry, handoff summary, or the agent's preferred
+architecture. First trace how the current content arose: inspect the latest
+direct user instructions and, when useful, the artifact history, blame, commit,
+or runtime readback. A commit author alone does not prove who made the product
+decision; an agent-authored change may encode a later explicit user choice.
+
+If the current content reflects the user's later explicit choice, that choice
+is the current SSOT. Preserve it, mark conflicting older proposals as stale,
+and do not "correct" it back to an earlier design. If provenance remains
+ambiguous and the alternatives would materially change the terminal outcome,
+ask the user before mutating the authority.
+
+Do not convert an old owner freeze into a new blocker. If the user explicitly
+chooses a development/preview channel, do not add unrelated production or
+stable qualification gates; retain identity binding, single-writer,
+idempotency, and final readback.
+
+Bind every callback, delegation, receipt, and recovery prompt to the current
+`instruction_revision` and an objective fingerprint. A lower revision is
+`stale` and read-only; a mismatched fingerprint is `conflict` and must return to
+the latest user instruction. Labels such as `owner-authoritative`, `terminal`,
+`freeze`, or `contract-required` do not supersede the current revision.
+
+## Artifact SSOT And Delivery
+
+Do not confuse the latest user instruction (the task SSOT) with the location of
+the requested artifact. When the user says to update, land, or make an artifact
+the SSOT, deliver it to the user-named canonical authority. For Git artifacts,
+default to remote canonical `main` unless the user explicitly names a different
+authority such as a release tag or deployed production state.
+
+A worktree, local branch, task branch, remote task ref, pull request,
+checkpoint, candidate commit, passing test, or documentation draft is only a
+recoverability or review surface. It is not artifact SSOT and must not be
+reported as completed. Completion requires canonical absorption and remote
+commit/tree readback; clean up task-owned worktrees and refs in the same task
+after that proof.
 
 ## Establish The Work
 
-1. Read the effective instructions and locate the real source, caller,
+1. Read the latest direct user instruction first, then locate the real source, caller,
    write set, acceptance surface, and terminal outcome before editing.
 2. Separate the critical path from useful follow-up work. Do not turn nearby
    cleanup, general hardening, or a platform repair into a prerequisite unless
@@ -59,7 +120,9 @@ report the missing managed capability; do not stop an otherwise executable task.
      completion;
    - `delivery_bridge`: use a minimal, explicit, traceable, reversible path that
      preserves the real artifact and acceptance semantics;
-   - `stop`: stop only when no safe path exists or authority is missing.
+   - `stop`: stop only when no safe path exists or a real permission/safety
+     boundary is missing; a stale contract, callback, or owner opinion is not
+     sufficient.
 4. After the breakpoint closes, return immediately to the delivery path.
    Permanent cleanup can follow only if it is required for the terminal outcome
    or has a separate, non-overlapping owner.
@@ -75,6 +138,9 @@ result.
   claims.
 - Do not call a plan, test pass, candidate, dry-run, handoff, or queued action
   complete. Verify the actual terminal surface.
+- When the requested terminal surface is SSOT, verify the remote canonical
+  authority rather than a task branch or local checkout, and do not defer the
+  canonical absorption to an unspecified later task.
 - Creating a worktree creates a same-task terminal obligation. Immediately
   register its ACTIVE owner, objective, exact write set, and next action through
   the repository's supported ownership surface.
