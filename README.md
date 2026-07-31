@@ -1,29 +1,25 @@
-# codex-skills-public
+# OPL Skills
 
-Public source repository for reusable Codex skills maintained by
-`gaofeng21cn`.
+Optional public enhancements for OPL Flow and ordinary Codex installations,
+maintained by `gaofeng21cn`. The physical repository remains
+`codex-skills-public` until the coordinated rename to `opl-skills` updates every
+installer, manifest, remote, and live node.
 
 ## Repository Role
 
-This repository is one of two source layers:
+OPL Skills is not a required third layer of the OPL Flow product. The public
+architecture is
+[`OPL Reusable Development Workflow Architecture`](https://github.com/gaofeng21cn/opl-flow/blob/main/docs/reusable-workflow-architecture.md).
 
-- `codex-skills-public`: public, reusable skill development source
-- `codex-skills-private`: private or machine-specific skill development source
+- Workflow-coupled Skills move into OPL Flow and install with the product.
+- Independently useful, sanitized Skills remain here as optional enhancements.
+- Personal Skills move into the owner's private OPL Instance.
 
-The private source repository also owns
-`contracts/skill-reference.json`, the machine-readable desired inventory and
-owner installation reference.
-
-The canonical cross-repository management boundary is the private
+During migration, the private
 [`codex-management-boundaries.json`](https://github.com/gaofeng21cn/codex-skills-private/blob/main/contracts/codex-management-boundaries.json)
-contract. This repository implements only its `public_skill_source` role.
-Update the contract first when changing repository roles or the public/private
-classification rule.
-
-The paired `public` / `private` names are intentional. They state the access and
-reuse boundary directly; changing them to broader names such as
-`codex-skills` or `codex-skills-internal` would make that boundary less obvious
-without changing the architecture.
+remains the current physical source map and `contracts/skill-reference.json`
+remains the current owner-install inventory. They do not override the target
+public architecture.
 
 Upstream-owned skills such as Ponytail, OpenAI curated skills, and Agent Reach
 are not copied or rewritten here. Install and update them directly through
@@ -50,6 +46,9 @@ python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github
   --repo gaofeng21cn/codex-skills-public \
   --path skills/<skill-name>
 ```
+
+Use the current physical repository name until the rename phase publishes and
+reads back `gaofeng21cn/opl-skills`.
 
 For the multi-machine environment, consult
 `gaofeng21cn/codex-skills-private:contracts/skill-reference.json` and install
