@@ -28,10 +28,15 @@ their owner-supported channels.
 
 | Group | Skills |
 | --- | --- |
-| Development entry points | `architect-and-simplify`, `develop-and-deliver`, `recover-codex-tasks`, `task-mode-gate` |
+| Development entry points | `architect-and-simplify` |
 | Architecture and reliability lenses | `book-aposd`, `book-clean-architecture`, `book-ddia`, `book-domain-driven-design`, `book-legacy-code`, `book-release-it`, `grill-with-docs`, `improve-codebase-architecture`, `prototype`, `zoom-out` |
 | Artifact and learning workflows | `academic-defense-prep`, `evidence-bound-closeout`, `external-learning-landing`, `xiaohongshu-repo-scout` |
 | Local application adapters | `apple-apps`, `mail-triage` |
+
+`develop-and-deliver`, `recover-codex-tasks`, and `task-mode-gate` are OPL
+Flow core Skills. Install or update OPL Flow to receive them from their single
+public source owner; do not install legacy projections from this enhancement
+pack.
 
 Some skills adapt MIT-licensed upstream work. See
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
