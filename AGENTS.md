@@ -2,7 +2,7 @@
 
 - This public repository owns reusable Codex skill source. Keep credentials, hostnames, machine inventories, private remotes, and absolute local paths out of tracked files.
 - Change a skill here first and validate it. Keep fleet installation routes in
-  `gaofeng21cn/codex-skills-private:contracts/skill-reference.json`; never create
+  `gaofeng21cn/opl-instance-gaofeng:contracts/skill-reference.json`; never create
   a fleet-owned byte projection.
 - Preserve deterministic source mappings and fail closed on dirty, ahead, diverged, or incomplete skill packages.
 - Run `python scripts/validate_skills.py` and the affected skill tests before committing.
