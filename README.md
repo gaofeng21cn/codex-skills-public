@@ -1,9 +1,8 @@
 # OPL Skills
 
 Optional public enhancements for OPL Flow and ordinary Codex installations,
-maintained by `gaofeng21cn`. The physical repository remains
-`codex-skills-public` until the coordinated rename to `opl-skills` updates every
-installer, manifest, remote, and live node.
+maintained by `gaofeng21cn`. The canonical repository is
+`gaofeng21cn/opl-skills`.
 
 ## Repository Role
 
@@ -15,11 +14,11 @@ architecture is
 - Independently useful, sanitized Skills remain here as optional enhancements.
 - Personal Skills move into the owner's private OPL Instance.
 
-During migration, the private
-[`codex-management-boundaries.json`](https://github.com/gaofeng21cn/codex-skills-private/blob/main/contracts/codex-management-boundaries.json)
-remains the current physical source map and `contracts/skill-reference.json`
-remains the current owner-install inventory. They do not override the target
-public architecture.
+The private
+[`codex-management-boundaries.json`](https://github.com/gaofeng21cn/opl-instance-gaofeng/blob/main/contracts/codex-management-boundaries.json)
+records the current source map and `contracts/skill-reference.json` records the
+current owner-install inventory. They do not override the target public
+architecture.
 
 Upstream-owned skills such as Ponytail, OpenAI curated skills, and Agent Reach
 are not copied or rewritten here. Install and update them directly through
@@ -43,15 +42,12 @@ Install one skill with the bundled Codex installer:
 
 ```bash
 python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
-  --repo gaofeng21cn/codex-skills-public \
+  --repo gaofeng21cn/opl-skills \
   --path skills/<skill-name>
 ```
 
-Use the current physical repository name until the rename phase publishes and
-reads back `gaofeng21cn/opl-skills`.
-
 For the multi-machine environment, consult
-`gaofeng21cn/codex-skills-private:contracts/skill-reference.json` and install
+`gaofeng21cn/opl-instance-gaofeng:contracts/skill-reference.json` and install
 from the named owner. `codex-machine-sync` reports presence but does not install,
 pin, update, copy, or delete skills. Private repository URLs and machine
 configuration belong in local untracked configuration, never in this
