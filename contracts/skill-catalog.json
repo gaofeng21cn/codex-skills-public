@@ -1,0 +1,97 @@
+{
+  "$schema": "./skill-catalog.schema.json",
+  "schema": "opl_skill_catalog.v1",
+  "repository": "gaofeng21cn/opl-skills",
+  "classification_policy": "metadata_only_never_implies_installation",
+  "preset_selection_policy": "explicit_named_preset_only",
+  "default_preset": null,
+  "skills": {
+    "academic-defense-prep": {
+      "source_path": "skills/academic-defense-prep",
+      "categories": ["academic-delivery"]
+    },
+    "apple-apps": {
+      "source_path": "skills/apple-apps",
+      "categories": ["local-application-adapter"]
+    },
+    "architect-and-simplify": {
+      "source_path": "skills/architect-and-simplify",
+      "categories": ["software-design-method"]
+    },
+    "book-aposd": {
+      "source_path": "skills/book-aposd",
+      "categories": ["software-architecture-lens"]
+    },
+    "book-clean-architecture": {
+      "source_path": "skills/book-clean-architecture",
+      "categories": ["software-architecture-lens"]
+    },
+    "book-ddia": {
+      "source_path": "skills/book-ddia",
+      "categories": ["software-architecture-lens"]
+    },
+    "book-domain-driven-design": {
+      "source_path": "skills/book-domain-driven-design",
+      "categories": ["software-architecture-lens"]
+    },
+    "book-legacy-code": {
+      "source_path": "skills/book-legacy-code",
+      "categories": ["software-architecture-lens"]
+    },
+    "book-release-it": {
+      "source_path": "skills/book-release-it",
+      "categories": ["software-architecture-lens"]
+    },
+    "evidence-bound-closeout": {
+      "source_path": "skills/evidence-bound-closeout",
+      "categories": ["delivery-evidence"]
+    },
+    "external-learning-landing": {
+      "source_path": "skills/external-learning-landing",
+      "categories": ["external-learning"]
+    },
+    "grill-with-docs": {
+      "source_path": "skills/grill-with-docs",
+      "categories": ["software-design-method"]
+    },
+    "improve-codebase-architecture": {
+      "source_path": "skills/improve-codebase-architecture",
+      "categories": ["software-design-method"]
+    },
+    "mail-triage": {
+      "source_path": "skills/mail-triage",
+      "categories": ["local-application-adapter"]
+    },
+    "prototype": {
+      "source_path": "skills/prototype",
+      "categories": ["software-design-method"]
+    },
+    "xiaohongshu-repo-scout": {
+      "source_path": "skills/xiaohongshu-repo-scout",
+      "categories": ["external-learning"]
+    },
+    "zoom-out": {
+      "source_path": "skills/zoom-out",
+      "categories": ["software-design-method"]
+    }
+  },
+  "presets": {
+    "development-complete": {
+      "selection": "explicit_only",
+      "expansion": "exact_members_only_no_category_or_wildcard_expansion",
+      "members": [
+        "architect-and-simplify",
+        "zoom-out",
+        "improve-codebase-architecture",
+        "grill-with-docs",
+        "prototype",
+        "book-aposd",
+        "book-clean-architecture",
+        "book-ddia",
+        "book-domain-driven-design",
+        "book-legacy-code",
+        "book-release-it"
+      ]
+    }
+  }
+}

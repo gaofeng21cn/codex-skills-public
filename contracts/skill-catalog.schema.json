@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://one-person-lab.dev/contracts/opl-skill-catalog.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema",
+    "repository",
+    "classification_policy",
+    "preset_selection_policy",
+    "default_preset",
+    "skills",
+    "presets"
+  ],
+  "properties": {
+    "$schema": { "const": "./skill-catalog.schema.json" },
+    "schema": { "const": "opl_skill_catalog.v1" },
+    "repository": { "const": "gaofeng21cn/opl-skills" },
+    "classification_policy": { "const": "metadata_only_never_implies_installation" },
+    "preset_selection_policy": { "const": "explicit_named_preset_only" },
+    "default_preset": { "type": "null" },
+    "skills": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/skill"
+      }
+    },
+    "presets": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/preset"
+      }
+    }
+  },
+  "$defs": {
+    "skillId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_path", "categories"],
+      "properties": {
+        "source_path": {
+          "type": "string",
+          "pattern": "^skills/[a-z0-9][a-z0-9-]*$"
+        },
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "academic-delivery",
+              "delivery-evidence",
+              "external-learning",
+              "local-application-adapter",
+              "software-architecture-lens",
+              "software-design-method"
+            ]
+          }
+        }
+      }
+    },
+    "preset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selection", "expansion", "members"],
+      "properties": {
+        "selection": { "const": "explicit_only" },
+        "expansion": { "const": "exact_members_only_no_category_or_wildcard_expansion" },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/skillId" }
+        }
+      }
+    }
+  }
+}

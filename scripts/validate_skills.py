@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -65,6 +66,13 @@ def main() -> int:
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
+    catalog = subprocess.run(
+        [sys.executable, str(repo_root / "scripts/validate_skill_catalog.py")],
+        cwd=repo_root,
+        check=False,
+    )
+    if catalog.returncode != 0:
+        return catalog.returncode
     print(f"validated {len(skill_dirs)} skill(s)")
     return 0
 

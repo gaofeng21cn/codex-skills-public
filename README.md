@@ -24,14 +24,32 @@ Upstream-owned skills such as Ponytail, OpenAI curated skills, and Agent Reach
 are not copied or rewritten here. Install and update them directly through
 their owner-supported channels.
 
+## Catalog And Presets
+
+[`contracts/skill-catalog.json`](contracts/skill-catalog.json) is the
+machine-readable catalog. Skill categories describe what a Skill is useful for;
+they never imply installation. There is no default preset and no category or
+wildcard expansion.
+
+The named `development-complete` preset is selected explicitly and resolves to
+exactly eleven Skills: five software-design methods (`architect-and-simplify`,
+`zoom-out`, `improve-codebase-architecture`, `grill-with-docs`, `prototype`)
+plus the six `book-*` architecture and reliability lenses. The two sets remain
+separately classified so discovery is precise, while the preset intentionally
+combines them for a complete development enhancement installation.
+
 ## Skills
 
 | Group | Skills |
 | --- | --- |
-| Development entry points | `architect-and-simplify` |
-| Architecture and reliability lenses | `book-aposd`, `book-clean-architecture`, `book-ddia`, `book-domain-driven-design`, `book-legacy-code`, `book-release-it`, `grill-with-docs`, `improve-codebase-architecture`, `prototype`, `zoom-out` |
+| Software-design methods | `architect-and-simplify`, `zoom-out`, `improve-codebase-architecture`, `grill-with-docs`, `prototype` |
+| Software architecture and reliability lenses | `book-aposd`, `book-clean-architecture`, `book-ddia`, `book-domain-driven-design`, `book-legacy-code`, `book-release-it` |
 | Artifact and learning workflows | `academic-defense-prep`, `evidence-bound-closeout`, `external-learning-landing`, `xiaohongshu-repo-scout` |
 | Local application adapters | `apple-apps`, `mail-triage` |
+
+These groups are discovery metadata, not install profiles. Selecting either
+group name installs nothing; only an explicit named preset or explicit Skill
+IDs produce an install selection.
 
 `develop-and-deliver`, `recover-codex-tasks`, and `task-mode-gate` are OPL
 Flow core Skills. Install or update OPL Flow to receive them from their single
@@ -51,7 +69,8 @@ python ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github
   --path skills/<skill-name>
 ```
 
-For the multi-machine environment, consult
+For the multi-machine environment, resolve a named preset through the catalog,
+then consult
 `gaofeng21cn/opl-instance-gaofeng:contracts/skill-reference.json` and install
 from the named owner. `codex-machine-sync` reports presence but does not install,
 pin, update, copy, or delete skills. Private repository URLs and machine
@@ -62,6 +81,7 @@ repository.
 
 ```bash
 python scripts/validate_skills.py
+python -m unittest tests/test_validate_skill_catalog.py
 pytest skills/apple-apps/tests/test_mail_meta.py -q
 ```
 
