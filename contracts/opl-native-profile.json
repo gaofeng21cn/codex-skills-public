@@ -29,6 +29,6 @@
   "verification_commands": [
     "python scripts/validate_skills.py",
     "python -m unittest tests/test_validate_skill_catalog.py",
-    "pytest skills/apple-apps/tests/test_mail_meta.py -q"
+    "pytest skills/apple-mail/tests/test_mail_meta.py -q"
   ]
 }

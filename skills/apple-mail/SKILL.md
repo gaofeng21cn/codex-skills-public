@@ -1,13 +1,14 @@
 ---
-name: apple-apps
-description: Use when managing Apple Mail on macOS, especially to list accounts or mailboxes, inspect recent messages, search, read, mark, archive, move, or delete emails in Mail.app; also use it as the shared entry point for future Apple native app automation on this Mac.
+name: apple-mail
+description: Use only for Apple Mail or Mail.app tasks on macOS, including listing accounts and mailboxes, inspecting or searching messages, and reading, marking, archiving, moving, or deleting mail. Do not use for other Apple native apps, webmail, IMAP-only work, or generic macOS automation.
 ---
 
-# Apple Apps
+# Apple Mail
 
 ## Overview
 
-This skill is the shared macOS-native app entry point. Right now it implements `mail.*` on top of `Mail.app` automation, with JSON output designed for agent workflows.
+This skill is the macOS Mail.app entry point. It implements `mail.*` automation
+with JSON output designed for agent workflows.
 
 ## When to Use
 

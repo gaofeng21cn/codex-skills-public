@@ -16,7 +16,7 @@ a companion to `codex-mail-workbench`, not a replacement for it.
 
 Choose exactly one mailbox-fact route before inspecting messages.
 
-Use this skill with `apple-apps` when the request is primarily:
+Use this skill with `apple-mail` when the request is primarily:
 
 - a quick screen of today's new mail;
 - explicitly about Apple Mail or Mail.app;
@@ -61,12 +61,12 @@ Keep route identifiers isolated:
 
 ## Workflow
 
-1. Select the Apple Mail route and load `apple-apps` first.
+1. Select the Apple Mail route and load `apple-mail` first.
 2. Read the shared private policy entry point when available.
 3. Start with lightweight metadata, not full bodies:
 
 ```bash
-python3 ~/.codex/skills/apple-apps/scripts/apple_apps.py mail triage-meta --limit 8 --include-read --on-date "YYYY-MM-DD"
+python3 ~/.codex/skills/apple-mail/scripts/apple_apps.py mail triage-meta --limit 8 --include-read --on-date "YYYY-MM-DD"
 ```
 
 4. Keep messages required by the shared private policy. Without that overlay,
@@ -81,13 +81,13 @@ python3 ~/.codex/skills/apple-apps/scripts/apple_apps.py mail triage-meta --limi
 5. For each kept email, use the exact `id`, `account`, and `mailboxPath` to read the body:
 
 ```bash
-python3 ~/.codex/skills/apple-apps/scripts/apple_apps.py mail read --id <id> --account "<account>" --mailbox-path "<mailbox>"
+python3 ~/.codex/skills/apple-mail/scripts/apple_apps.py mail read --id <id> --account "<account>" --mailbox-path "<mailbox>"
 ```
 
 6. If the current email does not explain enough context, use thread-aware search with the best available clue. The clue can be a manuscript id, title fragment, sender, order number, project name, meeting code, or any other structured identifier.
 
 ```bash
-python3 ~/.codex/skills/apple-apps/scripts/apple_apps.py mail search --account "<account>" --query "<manuscript id or title fragment>" --limit 10 --include-read
+python3 ~/.codex/skills/apple-mail/scripts/apple_apps.py mail search --account "<account>" --query "<manuscript id or title fragment>" --limit 10 --include-read
 ```
 
 7. Read 1-2 related emails from the returned thread context only if the current email still lacks enough detail.
